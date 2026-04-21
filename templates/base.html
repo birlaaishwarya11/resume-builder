@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Resume Builder{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav id="top-nav">
+        <div class="nav-left">
+            <a href="{{ url_for('editor.index') }}" class="nav-brand">Resume Builder</a>
+            <a href="{{ url_for('editor.index') }}" class="nav-link">Editor</a>
+            <a href="{{ url_for('cover_letter.cover_letter_page') }}" class="nav-link">Cover Letter</a>
+            <div class="nav-dropdown">
+                <button class="nav-link nav-dropdown-trigger">Databases <span class="caret">&#9662;</span></button>
+                <div class="nav-dropdown-content">
+                    <a href="{{ url_for('databases.candidate_page') }}">Candidate Database</a>
+                    <a href="{{ url_for('databases.resume_rules_page') }}">Resume Rules</a>
+                    <a href="{{ url_for('databases.cover_letter_db_page') }}">Cover Letter Database</a>
+                    <a href="{{ url_for('databases.cover_letter_rules_page') }}">Cover Letter Rules</a>
+                </div>
+            </div>
+            <a href="{{ url_for('settings.settings_page') }}" class="nav-link">Settings</a>
+        </div>
+        <div class="nav-right">
+            <a href="{{ url_for('auth.logout') }}" class="nav-link">Logout</a>
+        </div>
+    </nav>
+
+    <div id="toast-container"></div>
+
+    <main id="app-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

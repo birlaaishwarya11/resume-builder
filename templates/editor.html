@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Editor - Resume Builder{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/panels.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="split-pane" id="editor-split">
+    <!-- Left pane: YAML editor -->
+    <div class="split-left" id="editor-pane">
+        <div class="editor-toolbar">
+            <div class="toolbar-left">
+                <button class="btn btn-primary btn-sm" id="btn-save" title="Save (Ctrl+S)">Save</button>
+                <button class="btn btn-secondary btn-sm" id="btn-download-pdf">Download PDF</button>
+                <select id="style-select" class="toolbar-select" title="Resume style">
+                    {% for s in style.available|default(['classic']) %}
+                    <option value="{{ s }}" {% if s == style.current|default('classic') %}selected{% endif %}>{{ s|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="toolbar-right">
+                <button class="btn btn-secondary btn-sm" id="btn-jd-match" title="JD Match Panel">JD Match</button>
+                <button class="btn btn-secondary btn-sm" id="btn-history" title="Version History">History</button>
+            </div>
+        </div>
+        <div id="ace-editor">{{ yaml_content }}</div>
+    </div>
+
+    <!-- Right pane: Preview -->
+    <div class="split-right" id="preview-pane">
+        <div class="preview-header">
+            <span class="text-sm text-muted">Live Preview</span>
+            <span class="text-sm text-muted" id="page-count-badge"></span>
+        </div>
+        <div class="preview-container">
+            <iframe id="preview-iframe" sandbox="allow-same-origin"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- JD Match side panel -->
+<div class="side-panel" id="jd-panel">
+    <div class="panel-header">
+        <h3>JD Match</h3>
+        <button class="panel-close" id="jd-panel-close">&times;</button>
+    </div>
+    <div class="panel-tabs">
+        <button class="panel-tab active" data-tab="paste-jd">Paste JD</button>
+        <button class="panel-tab" data-tab="search-company">Search by Company</button>
+        <button class="panel-tab" data-tab="from-url">From URL</button>
+    </div>
+    <div class="panel-body">
+        <!-- Tab: Paste JD -->
+        <div class="tab-content active" id="tab-paste-jd">
+            <div class="form-group">
+                <label for="jd-text">Job Description</label>
+                <textarea id="jd-text" rows="12" placeholder="Paste the full job description here..."></textarea>
+            </div>
+            <div class="flex gap-1">
+                <button class="btn btn-primary btn-sm" id="btn-analyze-jd">Analyze</button>
+                <button class="btn btn-primary btn-sm" id="btn-generate-resume">Generate Resume</button>
+            </div>
+        </div>
+        <!-- Tab: Search by Company -->
+        <div class="tab-content" id="tab-search-company">
+            <div class="form-group">
+                <label for="jd-company">Company</label>
+                <input type="text" id="jd-company" placeholder="e.g. Stripe">
+            </div>
+            <div class="form-group">
+                <label for="jd-role">Role</label>
+                <input type="text" id="jd-role" placeholder="e.g. Backend Engineer">
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-find-jd">Find JD</button>
+        </div>
+        <!-- Tab: From URL -->
+        <div class="tab-content" id="tab-from-url">
+            <div class="form-group">
+                <label for="jd-url">Job Posting URL</label>
+                <input type="url" id="jd-url" placeholder="https://boards.greenhouse.io/...">
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-fetch-url">Fetch &amp; Analyze</button>
+        </div>
+        <!-- Results area (shared) -->
+        <div id="jd-results" class="mt-2" style="display:none;">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-sm" style="font-weight:600;">ATS Score</span>
+                <span class="score-badge" id="ats-score-badge">--</span>
+            </div>
+            <div class="form-group">
+                <label>Tags</label>
+                <div id="jd-tag-chips"></div>
+            </div>
+            <div class="form-group">
+                <label>Assessment</label>
+                <p class="text-sm" id="jd-assessment"></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- History side panel -->
+<div class="side-panel" id="history-panel">
+    <div class="panel-header">
+        <h3>Version History</h3>
+        <button class="panel-close" id="history-panel-close">&times;</button>
+    </div>
+    <div class="panel-body">
+        <div id="history-list" class="history-list">
+            <p class="text-sm text-muted">Loading versions...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Overlay for panels -->
+<div class="panel-overlay" id="panel-overlay"></div>
+
+<!-- Section metadata for JS -->
+<script>
+    var SECTION_NAMES = {{ section_names|tojson }};
+    var CUSTOM_SECTIONS = {{ custom_sections|tojson }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+<script src="{{ url_for('static', filename='js/tags.js') }}"></script>
+<script src="{{ url_for('static', filename='js/editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/jd.js') }}"></script>
+{% endblock %}

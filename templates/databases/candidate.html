@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Candidate Database - Resume Builder{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/databases.css') }}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+{% endblock %}
+{% block content %}
+<div class="db-editor-container">
+    <div class="db-toolbar">
+        <div class="db-toolbar-left">
+            <a href="{{ url_for('settings.settings_page') }}" class="btn btn-secondary btn-sm">&larr; Settings</a>
+            <h2>Candidate Database</h2>
+        </div>
+        <div class="db-toolbar-right">
+            <span id="save-status" class="text-muted text-sm"></span>
+            <button class="btn btn-primary" onclick="saveContent()">Save</button>
+        </div>
+    </div>
+    <div class="db-split">
+        <div class="db-editor-pane">
+            <div id="editor" class="ace-editor"></div>
+        </div>
+        <div class="db-preview-pane">
+            <div id="preview" class="md-preview"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/databases.js') }}"></script>
+<script>initDatabaseEditor('candidate');</script>
+{% endblock %}

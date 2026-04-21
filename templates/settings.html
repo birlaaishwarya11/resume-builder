@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Settings - Resume Builder{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+{% endblock %}
+{% block content %}
+<div class="settings-container">
+    <h1>Settings</h1>
+
+    <!-- Header/Contact -->
+    <div class="card">
+        <div class="card-title">Header & Contact Info</div>
+        <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="header-name" value="{{ settings.header.name or '' }}">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="header-email" value="{{ settings.header.contact.email or '' }}">
+            </div>
+            <div class="form-group">
+                <label>Phone</label>
+                <input type="text" id="header-phone" value="{{ settings.header.contact.phone or '' }}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Location</label>
+                <input type="text" id="header-location" value="{{ settings.header.contact.location or '' }}">
+            </div>
+            <div class="form-group">
+                <label>GitHub</label>
+                <input type="url" id="header-github" value="{{ settings.header.contact.github or '' }}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>LinkedIn</label>
+                <input type="url" id="header-linkedin" value="{{ settings.header.contact.linkedin or '' }}">
+            </div>
+            <div class="form-group">
+                <label>Portfolio URL</label>
+                <input type="url" id="header-portfolio" value="{{ settings.header.contact.portfolio_url or '' }}">
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveHeader()">Save Header</button>
+    </div>
+
+    <!-- AI Configuration -->
+    <div class="card">
+        <div class="card-title">AI Configuration</div>
+        <p class="text-muted text-sm mb-1">Configure your LLM provider for JD analysis, resume generation, and cover letters.</p>
+        <div class="form-group">
+            <label>Provider</label>
+            <select id="ai-provider">
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="gemini">Google (Gemini)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="ai-key" placeholder="Enter your API key">
+            <small class="text-muted" id="ai-key-status"></small>
+        </div>
+        <div class="form-group">
+            <label>Model (optional)</label>
+            <input type="text" id="ai-model" placeholder="e.g. claude-3-haiku-20240307">
+        </div>
+        <div class="flex gap-1">
+            <button class="btn btn-primary" onclick="saveAiConfig()">Save</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteAiConfig()">Remove Key</button>
+        </div>
+    </div>
+
+    <!-- Databases links -->
+    <div class="card">
+        <div class="card-title">Databases & Rules</div>
+        <p class="text-muted text-sm mb-1">Edit your content databases in a full-screen editor.</p>
+        <div class="db-links">
+            <a href="{{ url_for('databases.candidate_page') }}" class="db-link">Candidate Database</a>
+            <a href="{{ url_for('databases.resume_rules_page') }}" class="db-link">Resume Rules</a>
+            <a href="{{ url_for('databases.cover_letter_db_page') }}" class="db-link">Cover Letter Database</a>
+            <a href="{{ url_for('databases.cover_letter_rules_page') }}" class="db-link">Cover Letter Rules</a>
+        </div>
+    </div>
+
+    <!-- Section Names -->
+    <div class="card">
+        <div class="card-title">Section Names</div>
+        <p class="text-muted text-sm mb-1">Customize how section headings appear on your resume.</p>
+        {% for key, name in settings.section_names.items() %}
+        <div class="form-group">
+            <label>{{ key }}</label>
+            <input type="text" class="section-name-input" data-key="{{ key }}" value="{{ name }}">
+        </div>
+        {% endfor %}
+        <button class="btn btn-primary" onclick="saveSectionNames()">Save Section Names</button>
+    </div>
+
+    <!-- Account -->
+    <div class="card">
+        <div class="card-title">Account</div>
+        <p class="text-muted text-sm">{{ user.email }}</p>
+        <button class="btn btn-danger btn-sm mt-2" onclick="deleteAccount()">Delete Account</button>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+<script>
+    // Load AI config status on page load
+    loadAiConfig();
+</script>
+{% endblock %}

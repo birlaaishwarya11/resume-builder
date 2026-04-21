@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cover Letter</title>
+    <style>
+        @page {
+            size: Letter;
+            margin: 0.75in 1in;
+        }
+        body {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            color: #000;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .name {
+            font-size: 1.6em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .contact-info {
+            margin-top: 4px;
+            font-size: 10pt;
+        }
+        .contact-info a {
+            color: #1155CC;
+            text-decoration: none;
+        }
+        .date {
+            margin-bottom: 16px;
+        }
+        .salutation {
+            margin-bottom: 12px;
+        }
+        .body p {
+            margin: 0 0 12px 0;
+            text-align: justify;
+        }
+        .signature {
+            margin-top: 16px;
+        }
+        .signature a {
+            color: #1155CC;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="date">{{ date }}</div>
+
+    <div class="salutation">{{ salutation }}</div>
+
+    <div class="body">
+        {% for paragraph in paragraphs %}
+        <p>{{ paragraph }}</p>
+        {% endfor %}
+    </div>
+
+    <div class="signature">
+        <p>
+            Sincerely,<br>
+            {{ name | title }}<br>
+            <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>
+        </p>
+    </div>
+
+</body>
+</html>

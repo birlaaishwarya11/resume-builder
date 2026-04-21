@@ -1,0 +1,245 @@
+"""
+JD (Job Description) service.
+
+Capabilities:
+    analyze()           -- match score + structured suggestions
+    apply_suggestions() -- AI applies selected suggestions -> new YAML version
+    apply_full()        -- analyze + apply all in one call (for agents)
+"""
+
+import json
+import yaml
+
+from app.services.ai import call_llm, parse_json_response
+from app.services.resume import get_current_resume, save_current_resume, parse_yaml, dump_yaml
+from app.models import (
+    create_jd_session,
+    update_jd_session,
+    mark_jd_applied,
+    get_jd_session,
+    list_jd_sessions,
+    list_resume_versions,
+    get_resume_version,
+)
+
+
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
+_ANALYZE_SYSTEM = """\
+You are an expert ATS analyst and resume coach.
+
+Given a resume (YAML) and a job description, return a JSON object with exactly two keys:
+  "match_score": integer 0-100 (how well the resume matches the JD)
+  "suggestions": list of suggestion objects
+
+Each suggestion object must have:
+  "id":       string -- unique stable key, e.g. "add_keyword_0"
+  "type":     one of: add_keyword | strengthen_bullet | add_section | reorder | rephrase
+  "section":  the resume YAML key this targets (e.g. "technical_skills", "experience", "projects")
+  "value":    the specific change -- what keyword to add, how to rewrite a bullet, etc.
+  "reason":   one sentence explaining why this helps with the JD
+  "priority": integer 1 (must-have), 2 (recommended), or 3 (nice-to-have)
+
+Rules:
+- Return 5-15 suggestions ordered by priority.
+- Be specific: name the exact keyword, skill, or metric to add.
+- Do not invent experience the candidate does not have.
+- Return ONLY valid JSON -- no markdown fences, no prose.
+"""
+
+_APPLY_SYSTEM = """\
+You are an expert resume editor.
+
+You will receive a resume in YAML format and a list of approved suggestions.
+Apply ALL of the suggestions to the YAML and return the complete updated YAML.
+
+Rules:
+- Preserve the exact YAML structure and keys.
+- Do not remove any existing content unless a suggestion explicitly says to.
+- Add keywords naturally into existing bullets or skill lists.
+- When strengthening a bullet, keep it factual and concise.
+- Return ONLY valid YAML -- no markdown fences, no explanation.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def analyze(user_id, jd_text, provider, api_key, model=None):
+    """Analyze the best matching saved resume version against a JD.
+
+    Returns: (session_id, {match_score, suggestions, base_version_id, base_version_label}, logs)
+    """
+    logs = []
+
+    best = find_best_version_for_jd(user_id, jd_text)
+    base_version_id = None
+    base_version_label = None
+
+    if best:
+        full = get_resume_version(best['id'], user_id)
+        resume_yaml = full['yaml_content'] if full else get_current_resume(user_id)
+        base_version_id = best['id']
+        base_version_label = best.get('label') or f"Version {best['id']}"
+        matched_count = best.get('_matched_tags', '?')
+        logs.append(
+            f"Using saved version '{base_version_label}' "
+            f"(id={base_version_id}, {matched_count} tag(s) matched JD)"
+        )
+    else:
+        resume_yaml = get_current_resume(user_id)
+        logs.append('Using current resume (no tagged versions matched this JD)')
+
+    if not resume_yaml:
+        raise ValueError('No resume found. Upload a resume before running JD analysis.')
+
+    session_id = create_jd_session(user_id, jd_text)
+    logs.append(f'JD session created (id={session_id})')
+
+    logs.append('Analyzing resume against JD...')
+    user_msg = f"RESUME (YAML):\n{resume_yaml}\n\nJOB DESCRIPTION:\n{jd_text}"
+    raw = call_llm(provider, api_key, _ANALYZE_SYSTEM, user_msg, model)
+
+    result = parse_json_response(raw)
+    match_score = int(result.get('match_score', 0))
+    suggestions = result.get('suggestions', [])
+
+    for i, s in enumerate(suggestions):
+        if not s.get('id'):
+            s['id'] = f"{s.get('type', 'suggestion')}_{i}"
+
+    logs.append(f'Analysis complete: score={match_score}, suggestions={len(suggestions)}')
+    update_jd_session(session_id, match_score, suggestions)
+
+    return session_id, {
+        'match_score': match_score,
+        'suggestions': suggestions,
+        'base_version_id': base_version_id,
+        'base_version_label': base_version_label,
+    }, logs
+
+
+def apply_suggestions(user_id, session_id, suggestion_ids, provider, api_key, model=None):
+    """Apply approved suggestions to the user's resume.
+
+    Returns: (new_yaml, version_id, logs)
+    """
+    logs = []
+    session = get_jd_session(session_id, user_id)
+    if not session:
+        raise ValueError(f'JD session {session_id} not found or access denied')
+
+    suggestions = session.get('suggestions', [])
+    if isinstance(suggestions, str):
+        suggestions = json.loads(suggestions)
+
+    approved = [s for s in suggestions if s.get('id') in suggestion_ids]
+    if not approved:
+        raise ValueError('No valid suggestion ids provided')
+
+    logs.append(f'Applying {len(approved)} approved suggestions...')
+
+    resume_yaml = get_current_resume(user_id)
+    if not resume_yaml:
+        raise ValueError('No current resume found')
+
+    user_msg = (
+        f"CURRENT RESUME (YAML):\n{resume_yaml}\n\n"
+        f"APPROVED SUGGESTIONS (JSON):\n{json.dumps(approved, indent=2)}"
+    )
+    raw_yaml = call_llm(provider, api_key, _APPLY_SYSTEM, user_msg, model)
+    new_yaml = _strip_yaml_fences(raw_yaml)
+
+    try:
+        yaml.safe_load(new_yaml)
+    except yaml.YAMLError as e:
+        raise ValueError(f'LLM returned invalid YAML: {e}') from e
+
+    version_id = save_current_resume(
+        user_id, new_yaml,
+        source='jd_applied',
+        label=f'JD session {session_id}: {len(approved)} suggestions applied',
+    )
+    mark_jd_applied(session_id, version_id)
+    logs.append(f'Resume updated and saved as version {version_id}')
+
+    return new_yaml, version_id, logs
+
+
+def apply_full(user_id, jd_text, provider, api_key, model=None, min_priority=2):
+    """Analyze and apply all suggestions in one call.
+
+    Returns: (new_yaml, version_id, analysis_result, logs)
+    """
+    all_logs = []
+    session_id, analysis, analyze_logs = analyze(user_id, jd_text, provider, api_key, model)
+    all_logs.extend(analyze_logs)
+
+    suggestions = analysis['suggestions']
+    to_apply = [s['id'] for s in suggestions if s.get('priority', 3) <= min_priority]
+
+    if not to_apply:
+        raise ValueError('No high-priority suggestions to apply automatically')
+
+    new_yaml, version_id, apply_logs = apply_suggestions(
+        user_id, session_id, to_apply, provider, api_key, model
+    )
+    all_logs.extend(apply_logs)
+    return new_yaml, version_id, analysis, all_logs
+
+
+def get_session(session_id, user_id):
+    return get_jd_session(session_id, user_id)
+
+
+def list_sessions(user_id):
+    return list_jd_sessions(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Tag-based version matching
+# ---------------------------------------------------------------------------
+
+def _score_version_for_jd(tags, jd_text):
+    if not tags:
+        return 0.0
+    jd_lower = jd_text.lower()
+    matches = sum(1 for tag in tags if tag.lower() in jd_lower)
+    return matches / len(tags)
+
+
+def find_best_version_for_jd(user_id, jd_text):
+    """Return the saved version whose tags best match jd_text, or None."""
+    versions = list_resume_versions(user_id)
+    best = None
+    best_score = 0.0
+
+    for v in versions:
+        tags_raw = v.get('tags')
+        if not tags_raw:
+            continue
+        tags = json.loads(tags_raw) if isinstance(tags_raw, str) else tags_raw
+        if not tags:
+            continue
+        score = _score_version_for_jd(tags, jd_text)
+        if score > best_score:
+            best_score = score
+            matched_count = sum(1 for t in tags if t.lower() in jd_text.lower())
+            best = dict(v, _matched_tags=matched_count)
+
+    return best if best_score > 0 else None
+
+
+def _strip_yaml_fences(text):
+    text = text.strip()
+    if text.startswith('```'):
+        lines = text.splitlines()
+        start = 1
+        end = len(lines)
+        if lines[-1].strip() == '```':
+            end -= 1
+        text = '\n'.join(lines[start:end])
+    return text

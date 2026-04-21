@@ -1,0 +1,14 @@
+pyyaml
+jinja2
+weasyprint
+flask
+cryptography
+anthropic
+openai
+google-genai>=1.0.0
+language-tool-python
+pdfplumber
+psycopg2-binary
+gunicorn
+requests
+beautifulsoup4

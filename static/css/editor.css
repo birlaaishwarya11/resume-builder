@@ -1,0 +1,164 @@
+/* Split pane layout */
+.split-pane {
+    display: flex;
+    height: calc(100vh - 44px);
+}
+
+.split-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid #ddd;
+}
+
+.split-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: #e8e8e8;
+}
+
+/* Editor toolbar */
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+    flex-shrink: 0;
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.toolbar-select {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-family: inherit;
+    background: #fff;
+    cursor: pointer;
+}
+
+/* Ace editor container */
+#ace-editor {
+    flex: 1;
+    width: 100%;
+    font-size: 13px;
+}
+
+/* Preview pane */
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    flex-shrink: 0;
+}
+
+.preview-container {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* Resume iframe: scale 8.5" x 11" to fit */
+#preview-iframe {
+    width: 8.5in;
+    height: 11in;
+    border: none;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transform-origin: top center;
+    flex-shrink: 0;
+}
+
+/* Scale iframe to fit container */
+@media (max-height: 900px) {
+    #preview-iframe {
+        transform: scale(0.75);
+        margin-bottom: -25%;
+    }
+}
+
+@media (max-height: 750px) {
+    #preview-iframe {
+        transform: scale(0.6);
+        margin-bottom: -40%;
+    }
+}
+
+@media (max-width: 1200px) {
+    #preview-iframe {
+        transform: scale(0.65);
+        margin-bottom: -35%;
+    }
+}
+
+/* History list */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-item {
+    padding: 10px 12px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.history-item:hover {
+    background: #f5f5f5;
+}
+
+.history-item.active {
+    border-color: #1a73e8;
+    background: #f0f7ff;
+}
+
+.history-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.history-label {
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.history-date {
+    font-size: 0.75em;
+    color: #888;
+}
+
+.history-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.history-tag {
+    font-size: 0.7em;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #e3f2fd;
+    color: #1565c0;
+}

@@ -1,0 +1,68 @@
+/* Full-page database editor styles */
+.db-editor-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 44px);
+}
+.db-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+}
+.db-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.db-toolbar-left h2 {
+    font-size: 1em;
+    font-weight: 600;
+}
+.db-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.db-split {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+.db-editor-pane {
+    flex: 6;
+    position: relative;
+    border-right: 1px solid #e0e0e0;
+}
+.db-preview-pane {
+    flex: 4;
+    overflow: auto;
+    background: #fafafa;
+}
+.ace-editor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+.md-preview {
+    padding: 20px;
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+.md-preview h1 { font-size: 1.4em; margin: 16px 0 8px; }
+.md-preview h2 { font-size: 1.2em; margin: 14px 0 6px; }
+.md-preview h3 { font-size: 1.05em; margin: 12px 0 4px; }
+.md-preview p { margin: 8px 0; }
+.md-preview ul, .md-preview ol { margin: 8px 0 8px 20px; }
+.md-preview li { margin: 2px 0; }
+.md-preview code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+.md-preview pre { background: #f0f0f0; padding: 12px; border-radius: 4px; overflow-x: auto; }
+.md-preview pre code { background: none; padding: 0; }
+.md-preview table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.md-preview th, .md-preview td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 0.9em; }
+.md-preview th { background: #f0f0f0; font-weight: 600; }
+.md-preview hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }

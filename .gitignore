@@ -1,0 +1,40 @@
+# User data directories (per-user resumes, PDFs, databases)
+data/[0-9]*/
+data/*/
+
+# Keep defaults tracked
+!data/defaults/
+
+# Database
+*.db
+feedback.jsonl
+
+# Generated files
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Environment
+.env
+.fernet_key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
