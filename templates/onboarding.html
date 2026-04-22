@@ -124,6 +124,21 @@
             display: none;
         }
         .upload-status.visible { display: flex; align-items: center; gap: 8px; }
+        .upload-status.done .upload-spinner { display: none; }
+        .upload-status.done::before {
+            content: '\2713';
+            color: #1a8a3a;
+            font-weight: bold;
+            font-size: 18px;
+            line-height: 1;
+        }
+        .upload-status.error .upload-spinner { display: none; }
+        .upload-status.error::before {
+            content: '\26A0';
+            color: #c0392b;
+            font-size: 18px;
+            line-height: 1;
+        }
         .upload-spinner {
             width: 18px;
             height: 18px;
@@ -432,6 +447,7 @@
                 return;
             }
             uploadStatus.classList.add('visible');
+            uploadStatus.classList.remove('done', 'error');
             document.getElementById('upload-status-text').textContent = 'Parsing "' + file.name + '"...';
 
             var formData = new FormData();
@@ -454,6 +470,7 @@
                 if (data.status && data.status !== 'success' && data.status !== 'ai_parse_failed') {
                     document.getElementById('upload-status-text').textContent =
                         'Error: ' + (data.message || data.ai_error || 'Unknown error');
+                    uploadStatus.classList.add('error');
                     return;
                 }
                 yamlContent = data.yaml || '';
@@ -466,10 +483,12 @@
                     msg = 'Parsed with heuristic fallback (AI parser: ' + data.ai_error + ')';
                 }
                 document.getElementById('upload-status-text').textContent = msg;
+                uploadStatus.classList.add('done');
                 btnNext.disabled = false;
             })
             .catch(function(err) {
                 document.getElementById('upload-status-text').textContent = 'Upload failed: ' + err;
+                uploadStatus.classList.add('error');
             });
         }
 
