@@ -2,9 +2,8 @@
 
 import re
 import yaml
-import os
 from functools import wraps
-from flask import session, redirect, url_for, request
+from flask import session, redirect, url_for
 
 from app.models import (
     get_user_settings, DEFAULT_SECTION_NAMES,
@@ -209,10 +208,3 @@ def build_raw_text(extracted_data):
             if text:
                 parts.append(text)
     return '\n'.join(parts)
-
-
-def load_yaml(path):
-    if not os.path.exists(path):
-        return {}
-    with open(path, 'r') as f:
-        return yaml.safe_load(f) or {}

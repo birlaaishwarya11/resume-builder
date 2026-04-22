@@ -19,35 +19,26 @@ A Flask web application for creating, editing, and tailoring resumes using a YAM
 ### Prerequisites
 
 - Python 3.10+
-- PostgreSQL 14+
+- PostgreSQL 14+ (or a managed Postgres like [Neon](https://neon.tech))
 - System libraries for WeasyPrint: pango, cairo, gdk-pixbuf
 
 ### Local Development
 
 ```bash
-# Clone the repository
 git clone <repo-url>
 cd resume_builder
 
-# Create a virtual environment
 python -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
 export DATABASE_URL="postgresql://localhost:5432/resume_builder"
-export SECRET_KEY="your-secret-key-here"
+export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 
-# Initialize the database
-python -c "from app import create_app; app = create_app(); app.app_context().__enter__()"
-
-# Run the development server
-flask run --debug --port 5000
+flask --app app run --debug --port 5001
 ```
 
-Open http://localhost:5000 in your browser.
+Open http://localhost:5001 in your browser. Schema is created automatically on first request.
 
 ### macOS WeasyPrint Dependencies
 
@@ -61,52 +52,84 @@ brew install pango cairo gdk-pixbuf libffi
 sudo apt-get install libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libcairo2 libffi-dev
 ```
 
-## Railway Deployment
+## Deployment (free tier: Fly.io + Neon)
 
-1. Connect your GitHub repository to Railway
-2. Add a PostgreSQL plugin
-3. Set the required environment variables (see below)
-4. Deploy -- Railway will use the Procfile and Dockerfile automatically
+**Signup:**
+1. [Neon](https://console.neon.tech/signup) -- serverless Postgres (0.5 GB free, auto-suspend).
+2. [Fly.io](https://fly.io/app/sign-up) -- 3 shared-cpu-1x VMs free.
+
+**Steps:**
+```bash
+# 1. Install flyctl
+brew install flyctl
+fly auth login
+
+# 2. In Neon dashboard, create a project, copy the POOLED connection string
+#    (hostname ends with "-pooler"). Example:
+#    postgresql://user:pw@ep-xxx-pooler.region.neon.tech/neondb
+
+# 3. Launch the Fly app (picks up the Dockerfile)
+fly launch --no-deploy
+# Say "no" when asked to add a Postgres -- we use Neon.
+
+# 4. Set secrets
+fly secrets set \
+  DATABASE_URL='<your-neon-pooled-url>' \
+  SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')" \
+  FERNET_KEY="$(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+
+# 5. Deploy
+fly deploy
+```
+
+No volume, no `DATA_DIR`. All per-user state lives in Postgres (see
+`docs/adr/0001-postgres-only-storage.md`).
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_URL` | Yes | PostgreSQL connection string (Neon pooled URL in prod) |
 | `SECRET_KEY` | Yes | Flask session signing key (use a long random string) |
-| `PORT` | No | Server port (default: 5000, Railway sets this automatically) |
-| `FLASK_ENV` | No | `development` or `production` (default: production) |
+| `FERNET_KEY` | Production | Key for encrypting user-stored AI API keys |
+| `PORT` | No | Server port (Fly/Railway set this automatically) |
 
 ## Tech Stack
 
-- **Backend**: Flask, Flask-Login, Flask-WTF, SQLAlchemy, bcrypt
-- **Frontend**: Jinja2 templates, Ace.js editor, vanilla JavaScript
-- **PDF rendering**: WeasyPrint
-- **Database**: PostgreSQL with JSONB for tags
-- **Deployment**: Railway (Dockerfile + Procfile), Gunicorn
-- **Styling**: Custom CSS with split-pane layout, side panels, responsive design
+- **Backend**: Flask, psycopg2, WeasyPrint
+- **Frontend**: Jinja2, Ace.js, vanilla JavaScript
+- **Database**: PostgreSQL -- single source of truth for all per-user state
+- **Deployment**: Fly.io (recommended free tier) or Railway; Dockerfile + Gunicorn
+- **Styling**: Custom CSS with split-pane layout
 
 ## Project Structure
 
 ```
-app/                    # Flask application package
-  __init__.py           # App factory, blueprint registration
-  auth.py               # Authentication blueprint
-  editor.py             # Resume editor blueprint
-  cover_letter.py       # Cover letter blueprint
-  databases.py          # Markdown database editors
-  settings.py           # User settings
-  api.py                # JSON API endpoints
-templates/              # Jinja2 templates
-  base.html             # Base layout with nav
-  editor.html           # Resume editor page
-  cover_letter_editor.html
-  onboarding.html       # Setup wizard
-  ...
-static/
-  css/                  # Stylesheets
-  js/                   # Client-side JavaScript
-data/                   # User data directory
-  defaults/             # Default database templates
-tests/                  # Test suite
+app/
+  __init__.py             # App factory, blueprint registration
+  config.py               # Environment config
+  models.py               # Postgres schema + CRUD
+  orchestrator.py         # Central coordinator for agent/service calls
+  agents/                 # LLM-backed agents (jd_resume, cover_letter, jd_finder)
+  blueprints/             # Flask blueprints (auth, editor, databases, jd, ...)
+  services/               # ai, documents, resume, jd, parser, crypto
+  parsers/                # PDF parsing (local + LLM-assisted)
+templates/                # Jinja2 templates
+static/                   # CSS + client-side JS
+data/
+  defaults/               # Read-only templates shipped with the app
+docs/
+  adr/                    # Architecture Decision Records
+tests/
 ```
+
+## Architecture notes
+
+- **No per-user filesystem state.** All YAML, markdown databases, rules,
+  the agent learning log, and the cover-letter draft live in Postgres
+  `user_documents`. See [docs/adr/0001-postgres-only-storage.md](docs/adr/0001-postgres-only-storage.md).
+- **PDFs are ephemeral.** Generated in-memory by WeasyPrint and streamed
+  to the client.
+- **The 7-stage JD agent pipeline** is orchestrated in
+  `app/agents/jd_resume.py`: pre-screen -> version match -> generator ->
+  PDF fit -> ATS verify -> improvement loop -> tag/save.

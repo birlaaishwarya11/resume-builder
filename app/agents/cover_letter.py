@@ -8,46 +8,7 @@ Architecture:
     4. REVIEW          -- check format (3-5 paragraphs, 1 page, professional tone)
 """
 
-import os
-import json as _json
-
-from app.models import get_user_dir
-
-_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_DIR = os.path.dirname(os.path.dirname(_DIR))  # project root
-
-
-def _get_database_path(user_id):
-    user_path = os.path.join(get_user_dir(user_id), 'candidate_database.md')
-    if os.path.exists(user_path):
-        return user_path
-    return os.path.join(_PROJECT_DIR, 'data', 'defaults', 'candidate_database.md')
-
-
-def _get_cl_database_path(user_id):
-    user_path = os.path.join(get_user_dir(user_id), 'cover_letter_database.md')
-    if os.path.exists(user_path):
-        return user_path
-    return os.path.join(_PROJECT_DIR, 'data', 'defaults', 'cover_letter_database.md')
-
-
-def _get_story_bank_path(user_id):
-    return os.path.join(get_user_dir(user_id), 'cover_letter_stories.json')
-
-
-def _load_story_bank(user_id):
-    path = _get_story_bank_path(user_id)
-    if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            data = _json.load(f)
-        if isinstance(data, list):
-            return data
-    return []
-
-
-def _read_file(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        return f.read()
+from app.services import documents
 
 
 # ---------------------------------------------------------------------------
@@ -55,44 +16,12 @@ def _read_file(path):
 # ---------------------------------------------------------------------------
 
 def select_stories(jd_text, company_name, user_id, max_stories=4):
-    """Select the most relevant beyond-resume stories for a given JD."""
-    story_bank = _load_story_bank(user_id)
-    if not story_bank:
-        return []
+    """Select the most relevant beyond-resume stories for a given JD.
 
-    jd_lower = jd_text.lower()
-
-    theme_keywords = {
-        "fintech": ["fintech", "financial", "banking", "insurance", "payments"],
-        "product-thinking": ["product", "business needs", "stakeholder", "customer"],
-        "cross-functional": ["cross-functional", "collaborate", "product manager", "design"],
-        "leadership": ["lead", "senior", "mentor", "team", "champion"],
-        "ownership": ["ownership", "autonomy", "end-to-end", "full-stack"],
-        "engineering-culture": ["code review", "clean", "maintainable", "best practices"],
-        "compliance": ["compliance", "regulated", "security", "governance"],
-        "infrastructure": ["infrastructure", "cloud", "aws", "kubernetes", "serverless"],
-        "reliability": ["reliability", "sre", "incident", "monitoring", "uptime"],
-        "ai": ["ai", "machine learning", "ml", "llm", "generative"],
-        "safety": ["safety", "trust", "responsible"],
-        "impact": ["impact", "mission", "social"],
-        "growth": ["growth", "learning", "career"],
-        "startup": ["startup", "early-stage", "fast-paced", "series"],
-        "healthcare": ["health", "medical", "clinical"],
-    }
-
-    scored = []
-    for story in story_bank:
-        score = 0
-        for theme in story.get("theme", []):
-            keywords = theme_keywords.get(theme, [theme])
-            for kw in keywords:
-                if kw in jd_lower:
-                    score += 2
-                    break
-        scored.append((score, story))
-
-    scored.sort(key=lambda x: -x[0])
-    return [s[1] for s in scored[:max_stories] if s[0] > 0]
+    Story bank is not currently persisted; returns an empty list. Retained as
+    an extension point for a future `cover_letter_stories` document field.
+    """
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -142,17 +71,9 @@ def build_cover_letter_prompt(user_id, jd_text, company_name,
 
     Returns dict with 'system', 'user', 'stories_selected'.
     """
-    database = _read_file(_get_database_path(user_id))
-
-    cl_database = ""
-    cl_path = _get_cl_database_path(user_id)
-    if os.path.exists(cl_path):
-        cl_database = _read_file(cl_path)
-
-    resume_path = os.path.join(get_user_dir(user_id), 'resume.yaml')
-    resume_yaml = ""
-    if os.path.exists(resume_path):
-        resume_yaml = _read_file(resume_path)
+    database = documents.get_candidate_database(user_id)
+    cl_database = documents.get_cover_letter_database(user_id)
+    resume_yaml = documents.get_resume_yaml(user_id)
 
     stories = select_stories(jd_text, company_name, user_id)
     story_text = "\n\n".join(
@@ -162,11 +83,9 @@ def build_cover_letter_prompt(user_id, jd_text, company_name,
 
     system = COVER_LETTER_SYSTEM
 
-    rules_path = os.path.join(get_user_dir(user_id), 'cover_letter_rules.md')
-    if os.path.exists(rules_path):
-        user_rules = _read_file(rules_path).strip()
-        if user_rules:
-            system += f"\n\nADDITIONAL USER RULES:\n{user_rules}"
+    user_rules = documents.get_cover_letter_rules(user_id).strip()
+    if user_rules:
+        system += f"\n\nADDITIONAL USER RULES:\n{user_rules}"
 
     if hiring_manager:
         system += f"\n\nAddress the letter to: Dear {hiring_manager},"
@@ -214,16 +133,9 @@ def generate_cover_letter(user_id, jd_text, company_name, provider, api_key,
         end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
         text = "\n".join(lines[start:end]).strip()
 
-    output_dir = get_user_dir(user_id)
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, 'cover_letter.txt')
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(text)
-
     return {
         "text": text,
         "stories_used": prompt["stories_selected"],
         "company": company_name,
         "role": role_title,
-        "output_path": output_path,
     }

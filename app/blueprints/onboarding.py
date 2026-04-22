@@ -1,7 +1,8 @@
 """Onboarding blueprint: PDF upload, parsing, review, and completion."""
 
-import os
 import logging
+import os
+import tempfile
 
 import yaml
 from flask import (
@@ -16,7 +17,7 @@ from app.blueprints.helpers import (
     clean_parsed_resume, build_raw_text,
 )
 from app.models import (
-    get_user_dir, get_user_settings, is_onboarding_complete,
+    get_user_settings, is_onboarding_complete,
     mark_onboarding_complete, update_user_settings,
     DEFAULT_SECTION_NAMES, get_user_by_id,
     get_user_api_config,
@@ -40,6 +41,11 @@ bp = Blueprint('onboarding', __name__)
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _onboarding_pdf_path(user_id: int) -> str:
+    """Return a per-user tmp path for the uploaded PDF (onboarding only)."""
+    return os.path.join(tempfile.gettempdir(), f'resume_builder_onboarding_{user_id}.pdf')
+
 
 def _resolve_ai_credentials(request_data: dict, user_id: int) -> tuple:
     """Return (provider, api_key, model) from request body or DB.
@@ -151,7 +157,6 @@ def upload_resume():
     if not pdf_file or not pdf_file.filename or not pdf_file.filename.lower().endswith('.pdf'):
         return jsonify({"status": "error", "message": "Please upload a valid PDF file."}), 400
 
-    # Resolve AI credentials from form data or DB-stored config
     form_data = {
         'ai_provider': request.form.get('ai_provider', ''),
         'ai_api_key': request.form.get('ai_api_key', ''),
@@ -162,16 +167,12 @@ def upload_resume():
     except ValueError:
         ai_provider, ai_api_key, ai_model = '', '', ''
 
-    user_dir = get_user_dir(user_id)
-    os.makedirs(user_dir, exist_ok=True)
-    os.makedirs(os.path.join(user_dir, 'versions'), exist_ok=True)
-    pdf_path = os.path.join(user_dir, 'onboarding_upload.pdf')
+    pdf_path = _onboarding_pdf_path(user_id)
     pdf_file.save(pdf_path)
 
     try:
         extracted_style = extract_style_from_pdf(pdf_path)
 
-        # Step 1: Extract text with font metadata
         extracted_data = extract_text_local(pdf_path)
         extraction_source = 'local'
 
@@ -181,25 +182,21 @@ def upload_resume():
                 "message": "Could not extract text from PDF. The file may be image-only or corrupted.",
             }), 500
 
-        # Build flat line list for smart parser
         flat_lines = []
         for page in extracted_data.get('pages', []):
             flat_lines.extend(page.get('lines', []))
 
         raw_text = build_raw_text(extracted_data)
 
-        # Resolve smart-parser credentials (user key > env var > None)
         sp_provider, sp_api_key, sp_model = resolve_parser_credentials(
             ai_provider, ai_api_key, ai_model,
         )
 
-        # Step 2: Parse into structured data
         parsed = None
         ai_error_info = None
         parser_used = 'heuristic'
         generated_parser_code = None
 
-        # 2a. Check for an ACTIVE or LOCKED parser via parser_service
         best_parser = parser_service.get_best_parser(user_id)
         if best_parser:
             parser_state = best_parser['state']
@@ -209,7 +206,6 @@ def upload_resume():
             )
 
             if parser_state == 'LOCKED':
-                # Run locked parser locally -- no sandbox in this refactor
                 try:
                     exec_globals: dict = {}
                     exec(best_parser['code'], exec_globals)
@@ -243,7 +239,6 @@ def upload_resume():
                     )
                     parsed = parse_resume_from_extracted(extracted_data)
 
-        # 2b. Generate a new smart parser (if credentials available and no usable parser)
         if not best_parser and sp_provider and sp_api_key:
             logger.info("[SmartParser] Generating new parser for user %s", user_id)
             try:
@@ -278,7 +273,6 @@ def upload_resume():
                 )
                 parsed = parse_resume_from_extracted(extracted_data)
 
-        # 2c. Heuristic fallback (no parser, no credentials, or all above failed)
         if parsed is None:
             parsed = parse_resume_from_extracted(extracted_data)
 
@@ -288,10 +282,8 @@ def upload_resume():
                 "message": "Could not parse the PDF. Try providing an AI API key for better results.",
             }), 500
 
-        # Clean up common AI parser artifacts
         parsed = clean_parsed_resume(parsed)
 
-        # Step 3: Build response
         confidence = score_parsed_resume(parsed)
 
         header = {
@@ -299,7 +291,6 @@ def upload_resume():
             "contact": parsed.get('contact', {}),
         }
 
-        # Build section_names from original PDF headings (not defaults)
         raw_headings = parsed.pop('_section_headings', {})
         section_names = {}
         for key, heading_text in raw_headings.items():
@@ -383,7 +374,6 @@ def ai_change_request():
         user_msg = f"CURRENT YAML:\n{yaml_content}\n\nCHANGE REQUEST:\n{change_request}"
         response_text = call_llm(ai_provider, ai_api_key, system_prompt, user_msg, ai_model)
 
-        # Clean up response -- remove markdown code fences if present
         modified_yaml = response_text.strip()
         if modified_yaml.startswith('```'):
             lines = modified_yaml.split('\n')
@@ -393,7 +383,6 @@ def ai_change_request():
                 lines = lines[:-1]
             modified_yaml = '\n'.join(lines)
 
-        # Validate it is parseable YAML
         try:
             yaml.safe_load(modified_yaml)
         except Exception:
@@ -412,11 +401,7 @@ def ai_change_request():
 @bp.route('/api/search_section', methods=['POST'])
 @login_required
 def search_section():
-    """Search for a missing section in the uploaded PDF.
-
-    Falls back to local pdfplumber extraction.
-    Returns the found section as a YAML snippet ready to append.
-    """
+    """Search for a missing section in the uploaded PDF."""
     user_id = get_current_user_id()
     data = request.json
     section_hint = data.get('section_hint', '').strip()
@@ -427,8 +412,7 @@ def search_section():
             "message": "Please enter a section name to search for.",
         }), 400
 
-    user_dir = get_user_dir(user_id)
-    pdf_path = os.path.join(user_dir, 'onboarding_upload.pdf')
+    pdf_path = _onboarding_pdf_path(user_id)
 
     if not os.path.exists(pdf_path):
         return jsonify({
@@ -445,25 +429,20 @@ def search_section():
                 "message": f"Could not find a section matching '{section_hint}' in your PDF.",
             })
 
-        # Parse the found lines into structured data
         section_lines = search_result.get('lines', [])
         text_lines = [line.get('text', '') for line in section_lines]
-        line_meta = section_lines  # already has text/size/bold
+        line_meta = section_lines
 
-        # Use smart parsing to determine best format
         render_type, parsed = _smart_parse_section(text_lines, line_meta)
 
-        # Build section key
         section_key = _normalize_section_key(section_hint)
         if not section_key or section_key == 'other':
             section_key = section_hint.lower().replace(' ', '_')
 
-        # Build YAML snippet
         yaml_snippet = yaml.dump(
             {section_key: parsed}, sort_keys=False, allow_unicode=True,
         )
 
-        # Raw text for display
         raw_lines = '\n'.join(text_lines)
 
         return jsonify({
@@ -497,7 +476,6 @@ def complete_onboarding():
     section_names = data.get('section_names', {})
 
     try:
-        user_dir = get_user_dir(user_id)
         current_settings = get_user_settings(user_id)
 
         merged_header = current_settings['header'].copy()
@@ -508,7 +486,6 @@ def complete_onboarding():
                 if val:
                     merged_header.setdefault('contact', {})[key] = val
 
-        # Merge parsed section names with defaults
         merged_section_names = current_settings.get(
             'section_names', DEFAULT_SECTION_NAMES.copy(),
         )
@@ -528,10 +505,10 @@ def complete_onboarding():
             full_yaml = yaml.dump(full_data, sort_keys=False, allow_unicode=True)
             save_current_resume(user_id, full_yaml, source='upload', label='Initial upload')
 
-        # Delete the raw PDF -- PII no longer needed once YAML is saved
-        onboarding_pdf = os.path.join(user_dir, 'onboarding_upload.pdf')
-        if os.path.exists(onboarding_pdf):
-            os.remove(onboarding_pdf)
+        # PII no longer needed once YAML is saved
+        pdf_path = _onboarding_pdf_path(user_id)
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
 
         mark_onboarding_complete(user_id)
         return jsonify({"status": "success", "message": "Setup complete!"})
@@ -558,7 +535,7 @@ def skip_onboarding():
 def serve_uploaded_pdf():
     """Serve the uploaded onboarding PDF for in-browser viewing."""
     user_id = get_current_user_id()
-    pdf_path = os.path.join(get_user_dir(user_id), 'onboarding_upload.pdf')
+    pdf_path = _onboarding_pdf_path(user_id)
     if os.path.exists(pdf_path):
         return send_file(pdf_path, mimetype='application/pdf')
     return jsonify({"status": "error", "message": "No PDF found"}), 404

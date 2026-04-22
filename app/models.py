@@ -1,11 +1,12 @@
 """Database models and queries -- PostgreSQL only.
 
-All queries use psycopg2 with %s placeholders. No SQLite support.
+All per-user state lives in the database. No filesystem storage of user data.
+Application-level assets (templates, default markdown) ship with the app under
+`data/defaults/` and are read once at signup to seed a new user's documents.
 """
 
 import json
 import os
-import shutil
 import secrets
 from datetime import datetime
 
@@ -17,7 +18,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.config import Config
 
 DATABASE_URL = Config.DATABASE_URL
-DATA_DIR = Config.DATA_DIR
 
 DEFAULT_SECTION_NAMES = {
     "education": "Education",
@@ -36,34 +36,48 @@ _OLD_SECTION_NAMES_JSON = json.dumps({
 })
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# Per-user document fields stored in the user_documents table.
+DOCUMENT_FIELDS = (
+    'resume_yaml',
+    'cover_letter_draft_yaml',
+    'candidate_database',
+    'resume_rules',
+    'cover_letter_database',
+    'cover_letter_rules',
+    'resume_learnings',
+)
 
-def _copy_default_user_files(user_dir: str):
-    """Copy default template files into a new user's data directory."""
-    defaults_dir = os.path.join(DATA_DIR, 'defaults')
-    for filename in ('candidate_database.md', 'resume_rules.md',
-                     'cover_letter_database.md', 'cover_letter_rules.md'):
-        dest = os.path.join(user_dir, filename)
-        if not os.path.exists(dest):
-            src = os.path.join(defaults_dir, filename)
-            if os.path.exists(src):
-                shutil.copy2(src, dest)
-            else:
-                title = filename.replace('_', ' ').replace('.md', '').title()
-                with open(dest, 'w', encoding='utf-8') as f:
-                    f.write(f"# {title}\n\nAdd your content here.\n")
+# Which default template file seeds which user_documents field at signup.
+_DEFAULT_SEEDS = {
+    'candidate_database': 'candidate_database.md',
+    'resume_rules': 'resume_rules.md',
+    'cover_letter_database': 'cover_letter_database.md',
+    'cover_letter_rules': 'cover_letter_rules.md',
+}
 
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DEFAULTS_DIR = os.path.join(_PROJECT_ROOT, 'data', 'defaults')
+
+
+def _read_default(filename: str) -> str:
+    path = os.path.join(_DEFAULTS_DIR, filename)
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    title = filename.replace('_', ' ').replace('.md', '').title()
+    return f"# {title}\n\nAdd your content here.\n"
+
+
+# ---------------------------------------------------------------------------
+# Connection helpers
+# ---------------------------------------------------------------------------
 
 def get_db():
     """Return a new PostgreSQL connection."""
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
+    return psycopg2.connect(DATABASE_URL)
 
 
 def _fetchone(conn, query, params=()):
-    """Execute a query and return one row as a dict, or None."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(query, params)
     row = cur.fetchone()
@@ -72,7 +86,6 @@ def _fetchone(conn, query, params=()):
 
 
 def _fetchall(conn, query, params=()):
-    """Execute a query and return all rows as a list of dicts."""
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(query, params)
     rows = [dict(r) for r in cur.fetchall()]
@@ -81,7 +94,6 @@ def _fetchall(conn, query, params=()):
 
 
 def _execute(conn, query, params=()):
-    """Execute a query (INSERT/UPDATE/DELETE)."""
     cur = conn.cursor()
     cur.execute(query, params)
     cur.close()
@@ -92,8 +104,7 @@ def _execute(conn, query, params=()):
 # ---------------------------------------------------------------------------
 
 def init_db():
-    """Create tables and run migrations."""
-    os.makedirs(DATA_DIR, exist_ok=True)
+    """Create tables and run migrations (idempotent)."""
     conn = get_db()
     cur = conn.cursor()
 
@@ -118,6 +129,19 @@ def init_db():
             ai_provider TEXT DEFAULT NULL,
             ai_api_key_encrypted TEXT DEFAULT NULL,
             ai_model TEXT DEFAULT NULL
+        )
+    ''')
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS user_documents (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            resume_yaml             TEXT NOT NULL DEFAULT '',
+            cover_letter_draft_yaml TEXT NOT NULL DEFAULT '',
+            candidate_database      TEXT NOT NULL DEFAULT '',
+            resume_rules            TEXT NOT NULL DEFAULT '',
+            cover_letter_database   TEXT NOT NULL DEFAULT '',
+            cover_letter_rules      TEXT NOT NULL DEFAULT '',
+            resume_learnings        TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL
         )
     ''')
     cur.execute('''
@@ -156,15 +180,22 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS feedback (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            user_name TEXT NOT NULL,
+            feedback TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    ''')
 
-    # Migrations for existing databases -- safe to run repeatedly
     _safe_add_column(cur, 'users', 'mcp_api_key', 'TEXT DEFAULT NULL')
     _safe_add_column(cur, 'user_settings', 'ai_provider', 'TEXT DEFAULT NULL')
     _safe_add_column(cur, 'user_settings', 'ai_api_key_encrypted', 'TEXT DEFAULT NULL')
     _safe_add_column(cur, 'user_settings', 'ai_model', 'TEXT DEFAULT NULL')
     _safe_add_column(cur, 'resume_versions', 'tags', 'TEXT DEFAULT NULL')
 
-    # Reset verbose legacy section name defaults to simple ones
     cur.execute(
         "UPDATE user_settings SET section_names_json = %s WHERE section_names_json = %s",
         (json.dumps(DEFAULT_SECTION_NAMES), _OLD_SECTION_NAMES_JSON),
@@ -175,7 +206,6 @@ def init_db():
 
 
 def _safe_add_column(cur, table, column, definition):
-    """Add a column if it doesn't already exist (PostgreSQL)."""
     try:
         cur.execute("SAVEPOINT add_col")
         cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
@@ -222,13 +252,25 @@ def create_user(name, email, password):
             'VALUES (%s, %s, %s, %s, %s)',
             (user_id, json.dumps(default_header), json.dumps(DEFAULT_SECTION_NAMES), '[]', '{}'),
         )
+
+        seed_values = {field: _read_default(fname) for field, fname in _DEFAULT_SEEDS.items()}
+        _execute(
+            conn,
+            '''INSERT INTO user_documents
+               (user_id, candidate_database, resume_rules,
+                cover_letter_database, cover_letter_rules, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s)''',
+            (
+                user_id,
+                seed_values['candidate_database'],
+                seed_values['resume_rules'],
+                seed_values['cover_letter_database'],
+                seed_values['cover_letter_rules'],
+                datetime.now().isoformat(),
+            ),
+        )
+
         conn.commit()
-
-        user_dir = os.path.join(DATA_DIR, str(user_id))
-        os.makedirs(user_dir, exist_ok=True)
-        os.makedirs(os.path.join(user_dir, 'versions'), exist_ok=True)
-        _copy_default_user_files(user_dir)
-
         conn.close()
         return user_id
     except psycopg2.errors.UniqueViolation:
@@ -242,7 +284,6 @@ def create_user(name, email, password):
 
 
 def authenticate_user(email, password):
-    """Return user dict if credentials match, else None."""
     conn = get_db()
     user = _fetchone(conn, 'SELECT * FROM users WHERE email = %s', (email,))
     conn.close()
@@ -267,23 +308,12 @@ def get_user_by_id(user_id):
     return user
 
 
-def get_user_dir(user_id):
-    return os.path.join(DATA_DIR, str(user_id))
-
-
-def get_user_versions_dir(user_id):
-    return os.path.join(DATA_DIR, str(user_id), 'versions')
-
-
 def delete_user(user_id):
-    """Delete a user account, settings, and all workspace data."""
+    """Delete a user account. Cascades to settings, documents, versions, sessions."""
     conn = get_db()
     _execute(conn, 'DELETE FROM users WHERE id = %s', (user_id,))
     conn.commit()
     conn.close()
-    user_dir = get_user_dir(user_id)
-    if os.path.exists(user_dir):
-        shutil.rmtree(user_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +370,6 @@ def update_user_settings(user_id, header=None, section_names=None,
 
 
 def save_user_api_config(user_id, provider, api_key_encrypted, model=None):
-    """Save the user's AI provider configuration."""
     conn = get_db()
     _execute(
         conn,
@@ -353,7 +382,6 @@ def save_user_api_config(user_id, provider, api_key_encrypted, model=None):
 
 
 def get_user_api_config(user_id):
-    """Return the user's AI config dict, or None if not configured."""
     conn = get_db()
     row = _fetchone(
         conn,
@@ -392,6 +420,80 @@ def is_onboarding_complete(user_id):
 def mark_onboarding_complete(user_id):
     conn = get_db()
     _execute(conn, 'UPDATE users SET onboarding_complete = TRUE WHERE id = %s', (user_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# User documents
+# ---------------------------------------------------------------------------
+
+def _ensure_documents_row(conn, user_id: int):
+    """Create an empty user_documents row if one doesn't exist."""
+    _execute(
+        conn,
+        '''INSERT INTO user_documents (user_id, updated_at)
+           VALUES (%s, %s)
+           ON CONFLICT(user_id) DO NOTHING''',
+        (user_id, datetime.now().isoformat()),
+    )
+
+
+def get_document(user_id: int, field: str) -> str:
+    """Return the text content for a single document field. Empty string if unset."""
+    if field not in DOCUMENT_FIELDS:
+        raise ValueError(f"Unknown document field: {field}")
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        f'SELECT {field} AS content FROM user_documents WHERE user_id = %s',
+        (user_id,),
+    )
+    conn.close()
+    return (row['content'] if row else '') or ''
+
+
+def save_document(user_id: int, field: str, content: str) -> None:
+    """Write a document field. Creates the row if missing."""
+    if field not in DOCUMENT_FIELDS:
+        raise ValueError(f"Unknown document field: {field}")
+    conn = get_db()
+    _ensure_documents_row(conn, user_id)
+    _execute(
+        conn,
+        f'UPDATE user_documents SET {field} = %s, updated_at = %s WHERE user_id = %s',
+        (content or '', datetime.now().isoformat(), user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_all_documents(user_id: int) -> dict:
+    """Return all document fields as a dict. Missing row yields empty strings."""
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        'SELECT ' + ', '.join(DOCUMENT_FIELDS) + ' FROM user_documents WHERE user_id = %s',
+        (user_id,),
+    )
+    conn.close()
+    if not row:
+        return {f: '' for f in DOCUMENT_FIELDS}
+    return {f: (row.get(f) or '') for f in DOCUMENT_FIELDS}
+
+
+# ---------------------------------------------------------------------------
+# Feedback
+# ---------------------------------------------------------------------------
+
+def save_feedback(user_id: int, user_name: str, feedback: str) -> None:
+    conn = get_db()
+    _execute(
+        conn,
+        'INSERT INTO feedback (user_id, user_name, feedback, created_at) '
+        'VALUES (%s, %s, %s, %s)',
+        (user_id, user_name, feedback, datetime.now().isoformat()),
+    )
     conn.commit()
     conn.close()
 
@@ -458,7 +560,6 @@ def get_parser_by_id(parser_id):
 
 
 def get_active_parser(user_id):
-    """Return best parser: LOCKED first, then ACTIVE, or None."""
     conn = get_db()
     row = _fetchone(
         conn,
@@ -550,7 +651,7 @@ def delete_parser(parser_id, user_id):
 # Resume versions
 # ---------------------------------------------------------------------------
 
-RESUME_SOURCES = ('upload', 'manual_edit', 'jd_applied', 'ai_edit')
+RESUME_SOURCES = ('upload', 'manual_edit', 'jd_applied', 'ai_edit', 'jd_agent')
 
 
 def save_resume_version(user_id, yaml_content, source='manual_edit', label=None, tags=None):
@@ -610,6 +711,17 @@ def get_latest_resume_version(user_id):
     )
     conn.close()
     return row
+
+
+def delete_resume_version(version_id, user_id):
+    conn = get_db()
+    _execute(
+        conn,
+        'DELETE FROM resume_versions WHERE id = %s AND user_id = %s',
+        (version_id, user_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 # ---------------------------------------------------------------------------

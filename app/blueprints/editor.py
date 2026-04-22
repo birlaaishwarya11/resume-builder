@@ -1,11 +1,8 @@
 """Editor blueprint: main resume editor page and its API endpoints."""
 
-import glob
 import io
-import json
 import logging
 import os
-from datetime import datetime
 
 import yaml
 from flask import (
@@ -21,26 +18,20 @@ from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 
 from app.blueprints.helpers import (
-    BUILTIN_KEYS,
     get_current_custom_sections,
     get_current_section_names,
     get_current_user_header,
     get_current_user_id,
-    infer_render_type,
-    load_yaml,
     login_required,
     md_bold,
     merge_header,
     strip_header,
 )
 from app.models import (
-    DATA_DIR,
-    DEFAULT_SECTION_NAMES,
     get_user_by_id,
-    get_user_dir,
     get_user_settings,
-    get_user_versions_dir,
     is_onboarding_complete,
+    save_feedback,
 )
 from app.services.resume import (
     dump_yaml,
@@ -53,7 +44,6 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('editor', __name__)
 
-# Template directory lives at the project root, two levels above this file.
 _BLUEPRINT_DIR = os.path.dirname(os.path.abspath(__file__))
 _APP_DIR = os.path.dirname(_BLUEPRINT_DIR)
 BASE_DIR = os.path.dirname(_APP_DIR)
@@ -96,22 +86,19 @@ def index():
     if not is_onboarding_complete(user_id):
         return redirect(url_for('onboarding.onboarding_page'))
 
-    user_dir = get_user_dir(user_id)
     header = get_current_user_header()
     section_names = get_current_section_names()
     custom_sections = get_current_custom_sections()
     user = get_user_by_id(user_id)
 
-    resume_path = os.path.join(user_dir, 'resume.yaml')
-    has_resume = os.path.exists(resume_path)
+    current_yaml = get_current_resume(user_id)
+    has_resume = bool(current_yaml)
 
     if has_resume:
-        resume_data = load_yaml(resume_path)
-        editable_data = strip_header(resume_data, header)
+        editable_data = strip_header(current_yaml, header)
     else:
         editable_data = {}
 
-    # Load saved style from user settings, with defaults.
     settings = get_user_settings(user_id)
     saved_style = settings.get('style', {})
     style = {
@@ -145,8 +132,6 @@ def preview():
     style = data.get('style', {})
 
     try:
-        # Allow overrides from the request (used during onboarding before
-        # settings are persisted).
         header = data.get('header') or get_current_user_header()
         section_names = data.get('section_names') or get_current_section_names()
         custom_sections = data.get('custom_sections') or get_current_custom_sections()
@@ -165,12 +150,11 @@ def preview():
 @bp.route('/api/save', methods=['POST'])
 @login_required
 def save():
-    """Save the current YAML as a new version (DB + legacy file)."""
+    """Save the current YAML as a new version in the database."""
     data = request.json
     resume_yaml = data.get('resume', '')
     keyword = data.get('keyword', 'default')
 
-    # Optional tags for JD matching, e.g. ["python", "backend", "aws"].
     tags = data.get('tags') or None
     if isinstance(tags, list):
         tags = [str(t).strip() for t in tags if str(t).strip()]
@@ -179,35 +163,18 @@ def save():
 
     try:
         user_id = get_current_user_id()
-        versions_dir = get_user_versions_dir(user_id)
         header = get_current_user_header()
-        user = get_user_by_id(user_id)
 
         full_data = merge_header(resume_yaml, header)
         full_yaml = yaml.dump(full_data, sort_keys=False, allow_unicode=True)
 
-        # Save main file + DB version row (with optional tags).
         version_id = save_current_resume(
             user_id, full_yaml, source='manual_edit', label=keyword, tags=tags,
         )
 
-        # Also write a legacy file-based version for backward compatibility.
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_keyword = ''.join(
-            c for c in keyword if c.isalnum() or c in ('-', '_')
-        ).strip() or 'default'
-        safe_name = ''.join(
-            c for c in user['name'] if c.isalnum() or c in (' ', '-', '_')
-        ).strip().replace(' ', '_')
-        version_filename = f'{safe_name}_{safe_keyword}_{timestamp}.yaml'
-
-        os.makedirs(versions_dir, exist_ok=True)
-        with open(os.path.join(versions_dir, version_filename), 'w') as f:
-            f.write(full_yaml)
-
         return jsonify({
             'status': 'success',
-            'message': f'Saved as {version_filename}',
+            'message': f'Saved version {version_id}',
             'version_id': version_id,
         })
     except Exception as e:
@@ -226,13 +193,10 @@ def download_pdf():
 
     try:
         user_id = get_current_user_id()
-        user_dir = get_user_dir(user_id)
         user = get_user_by_id(user_id)
 
         html_content = _render_resume_html(resume_yaml, style)
-
-        pdf_path = os.path.join(user_dir, 'preview.pdf')
-        HTML(string=html_content, base_url=BASE_DIR).write_pdf(pdf_path)
+        pdf_bytes = HTML(string=html_content, base_url=BASE_DIR).write_pdf()
 
         safe_name = ''.join(
             c for c in user['name'] if c.isalnum() or c in (' ', '-', '_')
@@ -246,79 +210,10 @@ def download_pdf():
         else:
             download_name = f'{safe_name}_Resume.pdf'
 
-        return send_file(pdf_path, as_attachment=not inline,
-                         download_name=download_name)
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@bp.route('/api/history')
-@login_required
-def history():
-    """List file-based version history (legacy glob-based)."""
-    user_id = get_current_user_id()
-    versions_dir = get_user_versions_dir(user_id)
-
-    if not os.path.exists(versions_dir):
-        return jsonify([])
-
-    files = glob.glob(os.path.join(versions_dir, '*.yaml'))
-    files.sort(key=os.path.getmtime, reverse=True)
-
-    history_list = []
-    for f in files:
-        filename = os.path.basename(f)
-        timestamp = datetime.fromtimestamp(
-            os.path.getmtime(f)
-        ).strftime('%Y-%m-%d %H:%M:%S')
-        history_list.append({'filename': filename, 'timestamp': timestamp})
-
-    return jsonify(history_list)
-
-
-@bp.route('/api/load/<filename>')
-@login_required
-def load_version(filename):
-    """Load YAML content from a versioned file."""
-    try:
-        user_id = get_current_user_id()
-        versions_dir = get_user_versions_dir(user_id)
-        header = get_current_user_header()
-
-        # Sanitize filename to prevent directory traversal.
-        filename = os.path.basename(filename)
-        filepath = os.path.join(versions_dir, filename)
-        if not os.path.exists(filepath):
-            return jsonify({'status': 'error', 'message': 'File not found'}), 404
-
-        with open(filepath, 'r') as f:
-            content = f.read()
-
-        editable_data = strip_header(content, header)
-        editable_yaml = dump_yaml(editable_data)
-
-        return jsonify({'status': 'success', 'content': editable_yaml})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@bp.route('/api/delete_version/<filename>', methods=['DELETE'])
-@login_required
-def delete_version(filename):
-    """Delete a file-based version."""
-    try:
-        user_id = get_current_user_id()
-        versions_dir = get_user_versions_dir(user_id)
-
-        # Sanitize filename to prevent directory traversal.
-        filename = os.path.basename(filename)
-        filepath = os.path.join(versions_dir, filename)
-
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            return jsonify({'status': 'success', 'message': f'Deleted {filename}'})
-        else:
-            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+        return send_file(
+            io.BytesIO(pdf_bytes), mimetype='application/pdf',
+            as_attachment=not inline, download_name=download_name,
+        )
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -326,7 +221,7 @@ def delete_version(filename):
 @bp.route('/api/feedback', methods=['POST'])
 @login_required
 def submit_feedback():
-    """Save user feedback to feedback.jsonl."""
+    """Save user feedback to the database."""
     data = request.json
     feedback_text = data.get('feedback', '').strip()
 
@@ -337,17 +232,8 @@ def submit_feedback():
     user = get_user_by_id(user_id)
     user_name = user['name'] if user else 'Unknown'
 
-    feedback_file = os.path.join(DATA_DIR, 'feedback.jsonl')
-    entry = {
-        'timestamp': datetime.now().isoformat(),
-        'user_name': user_name,
-        'user_id': user_id,
-        'feedback': feedback_text,
-    }
-
     try:
-        with open(feedback_file, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
+        save_feedback(user_id, user_name, feedback_text)
         return jsonify({'status': 'success', 'message': 'Thank you for your feedback!'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -366,9 +252,6 @@ def check_grammar():
     if not resume_yaml:
         return jsonify({'status': 'error', 'message': 'Missing resume content'}), 400
 
-    # ------------------------------------------------------------------
-    # Offline / local mode
-    # ------------------------------------------------------------------
     if provider == 'local':
         try:
             clean_text = _extract_text_from_yaml(resume_yaml)
@@ -407,9 +290,6 @@ def check_grammar():
                 'message': f'Grammar check failed: {str(e)}',
             }), 500
 
-    # ------------------------------------------------------------------
-    # AI mode
-    # ------------------------------------------------------------------
     from app.orchestrator import resolve_ai_credentials
     from app.services.ai import call_llm, parse_json_response
 
@@ -444,7 +324,6 @@ def check_grammar():
 # ---------------------------------------------------------------------------
 
 def _extract_text_from_yaml(resume_yaml: str) -> str:
-    """Recursively pull all string values from parsed YAML."""
     def _get_text_values(data):
         values = []
         if isinstance(data, dict):
@@ -466,7 +345,6 @@ def _extract_text_from_yaml(resume_yaml: str) -> str:
 
 
 def _build_grammar_results_local(matches, clean_text: str) -> list[dict]:
-    """Convert language_tool_python matches to our JSON format."""
     results = []
     for match in matches:
         context = match.context
@@ -482,7 +360,6 @@ def _build_grammar_results_local(matches, clean_text: str) -> list[dict]:
 
 
 def _build_grammar_results_api(matches: list, clean_text: str) -> list[dict]:
-    """Convert public LanguageTool API matches to our JSON format."""
     results = []
     for match in matches:
         offset = match['offset']

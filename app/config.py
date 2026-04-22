@@ -11,11 +11,6 @@ class Config:
     DATABASE_URL = os.environ.get('DATABASE_URL', '')
     FERNET_KEY = os.environ.get('FERNET_KEY', '')
 
-    # Data directory for per-user files (resume YAML, PDFs, databases)
-    DATA_DIR = os.environ.get('DATA_DIR', os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'
-    ))
-
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB upload limit
 
     # PDF rendering defaults

@@ -1,18 +1,18 @@
 """Databases blueprint: full-page editors for candidate DB, resume rules, CL DB, CL rules."""
 
-import os
 from flask import Blueprint, render_template, request, jsonify
 
 from app.blueprints.helpers import login_required, get_current_user_id
-from app.models import get_user_dir
+from app.models import get_document, save_document
 
 bp = Blueprint('databases', __name__)
 
-_DB_FILES = {
-    'candidate': 'candidate_database.md',
-    'resume_rules': 'resume_rules.md',
-    'cover_letter': 'cover_letter_database.md',
-    'cover_letter_rules': 'cover_letter_rules.md',
+# Map URL-facing type names to the document field in user_documents.
+_DB_FIELDS = {
+    'candidate': 'candidate_database',
+    'resume_rules': 'resume_rules',
+    'cover_letter': 'cover_letter_database',
+    'cover_letter_rules': 'cover_letter_rules',
 }
 
 _DB_TITLES = {
@@ -21,13 +21,6 @@ _DB_TITLES = {
     'cover_letter': 'Cover Letter Database',
     'cover_letter_rules': 'Cover Letter Rules',
 }
-
-
-def _get_db_path(user_id, db_type):
-    filename = _DB_FILES.get(db_type)
-    if not filename:
-        return None
-    return os.path.join(get_user_dir(user_id), filename)
 
 
 # --- Full-page editor routes ---
@@ -66,23 +59,17 @@ def cover_letter_rules_page():
 @login_required
 def api_database(db_type):
     user_id = get_current_user_id()
-    path = _get_db_path(user_id, db_type)
-    if not path:
+    field = _DB_FIELDS.get(db_type)
+    if not field:
         return jsonify({'error': f'Unknown database type: {db_type}'}), 400
 
     if request.method == 'GET':
-        content = ''
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                content = f.read()
+        content = get_document(user_id, field)
         return jsonify({'content': content, 'type': db_type,
                         'title': _DB_TITLES.get(db_type, db_type)})
 
     data = request.json or {}
-    content = data.get('content', '')
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(content)
+    save_document(user_id, field, data.get('content', ''))
     return jsonify({'status': 'ok'})
 
 

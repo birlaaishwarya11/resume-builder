@@ -1,5 +1,6 @@
 """Cover letter blueprint: editor page, generate, preview, download."""
 
+import io
 import os
 import traceback
 import yaml
@@ -9,8 +10,9 @@ from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 
 from app.blueprints.helpers import login_required, get_current_user_id, md_bold
-from app.models import get_user_dir, get_user_settings
+from app.models import get_user_settings
 from app.orchestrator import get_orchestrator
+from app.services import documents
 
 bp = Blueprint('cover_letter', __name__)
 
@@ -20,15 +22,28 @@ _TEMPLATE_DIR = os.path.join(
 )
 
 
+def _load_draft(user_id):
+    raw = documents.get_cover_letter_draft(user_id)
+    if not raw:
+        return {}
+    try:
+        return yaml.safe_load(raw) or {}
+    except Exception:
+        return {}
+
+
+def _save_draft(user_id, draft):
+    yaml_text = yaml.dump(
+        draft, default_flow_style=False, allow_unicode=True, sort_keys=False,
+    )
+    documents.save_cover_letter_draft(user_id, yaml_text)
+
+
 @bp.route('/cover-letter')
 @login_required
 def cover_letter_page():
     user_id = get_current_user_id()
-    draft_path = os.path.join(get_user_dir(user_id), 'cover_letter_draft.yaml')
-    draft = {}
-    if os.path.exists(draft_path):
-        with open(draft_path, 'r', encoding='utf-8') as f:
-            draft = yaml.safe_load(f) or {}
+    draft = _load_draft(user_id)
     settings = get_user_settings(user_id)
     return render_template('cover_letter_editor.html',
                            draft=draft, settings=settings)
@@ -53,7 +68,6 @@ def generate():
             jd_text, company, role_title=role, hiring_manager=hiring_manager
         )
 
-        # Parse into structured YAML for the editor
         text = result['text']
         paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
 
@@ -61,7 +75,6 @@ def generate():
         if paragraphs and paragraphs[0].lower().startswith('dear'):
             salutation = paragraphs.pop(0)
 
-        # Remove signature block if present
         body_paragraphs = []
         for p in paragraphs:
             if p.lower().startswith('sincerely') or p.lower().startswith('best regards'):
@@ -73,10 +86,7 @@ def generate():
             'paragraphs': body_paragraphs,
         }
 
-        # Save draft YAML
-        draft_path = os.path.join(get_user_dir(user_id), 'cover_letter_draft.yaml')
-        with open(draft_path, 'w', encoding='utf-8') as f:
-            yaml.dump(draft, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        _save_draft(user_id, draft)
 
         return jsonify({
             'status': 'success',
@@ -128,30 +138,21 @@ def download():
     template = env.get_template('cover_letter.html')
     html = template.render(draft=draft, header=header, style=style)
 
-    user_dir = get_user_dir(user_id)
-    os.makedirs(user_dir, exist_ok=True)
-    pdf_path = os.path.join(user_dir, 'cover_letter.pdf')
-    HTML(string=html).write_pdf(pdf_path)
-
-    return send_file(pdf_path, mimetype='application/pdf',
-                     as_attachment=True, download_name='cover_letter.pdf')
+    pdf_bytes = HTML(string=html).write_pdf()
+    return send_file(
+        io.BytesIO(pdf_bytes), mimetype='application/pdf',
+        as_attachment=True, download_name='cover_letter.pdf',
+    )
 
 
 @bp.route('/api/cover_letter/draft', methods=['GET', 'PUT'])
 @login_required
 def draft():
     user_id = get_current_user_id()
-    draft_path = os.path.join(get_user_dir(user_id), 'cover_letter_draft.yaml')
 
     if request.method == 'GET':
-        if os.path.exists(draft_path):
-            with open(draft_path, 'r', encoding='utf-8') as f:
-                content = yaml.safe_load(f) or {}
-            return jsonify(content)
-        return jsonify({})
+        return jsonify(_load_draft(user_id))
 
     data = request.json or {}
-    os.makedirs(os.path.dirname(draft_path), exist_ok=True)
-    with open(draft_path, 'w', encoding='utf-8') as f:
-        yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    _save_draft(user_id, data)
     return jsonify({'status': 'ok'})

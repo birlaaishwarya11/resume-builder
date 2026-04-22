@@ -19,9 +19,10 @@ import yaml
 
 from app.services.ai import call_llm, parse_json_response
 from app.services.resume import save_current_resume, get_current_resume, tag_version
+from app.services import documents
 from app.models import (
-    get_user_settings, get_user_dir, DATA_DIR,
-    list_resume_versions, get_resume_version, DEFAULT_SECTION_NAMES,
+    get_user_settings, list_resume_versions, get_resume_version,
+    DEFAULT_SECTION_NAMES,
 )
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,25 +41,6 @@ DEFAULT_STYLE = {
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _get_database_path(user_id):
-    user_path = os.path.join(get_user_dir(user_id), 'candidate_database.md')
-    if os.path.exists(user_path):
-        return user_path
-    return os.path.join(_PROJECT_DIR, 'data', 'defaults', 'candidate_database.md')
-
-
-def _get_rules_path(user_id):
-    user_path = os.path.join(get_user_dir(user_id), 'resume_rules.md')
-    if os.path.exists(user_path):
-        return user_path
-    return os.path.join(_PROJECT_DIR, 'data', 'defaults', 'resume_rules.md')
-
-
-def _read_file(path):
-    with open(path, 'r', encoding='utf-8') as f:
-        return f.read()
-
 
 def _strip_yaml_fences(text):
     text = text.strip()
@@ -98,11 +80,11 @@ def _md_bold(text):
 
 
 # ---------------------------------------------------------------------------
-# PDF rendering and page counting
+# PDF rendering and page counting (in-memory, no filesystem)
 # ---------------------------------------------------------------------------
 
-def render_pdf(yaml_content, user_id, style=None):
-    """Render resume YAML to PDF. Returns the path to the generated PDF."""
+def render_pdf_bytes(yaml_content, user_id, style=None) -> bytes:
+    """Render resume YAML to PDF bytes. Does not touch the filesystem."""
     from jinja2 import Environment, FileSystemLoader
     from weasyprint import HTML
 
@@ -121,18 +103,12 @@ def render_pdf(yaml_content, user_id, style=None):
         section_names=section_names, custom_sections=custom_sections,
     )
 
-    user_dir = get_user_dir(user_id)
-    os.makedirs(user_dir, exist_ok=True)
-    pdf_path = os.path.join(user_dir, 'preview.pdf')
-    HTML(string=html_content, base_url=_DIR).write_pdf(pdf_path)
-    return pdf_path
+    return HTML(string=html_content, base_url=_DIR).write_pdf()
 
 
-def count_pdf_pages(pdf_path):
-    with open(pdf_path, 'rb') as f:
-        content = f.read()
-    count = content.count(b'/Type /Page')
-    pages_refs = content.count(b'/Type /Pages')
+def count_pdf_pages_from_bytes(pdf_bytes: bytes) -> int:
+    count = pdf_bytes.count(b'/Type /Page')
+    pages_refs = pdf_bytes.count(b'/Type /Pages')
     return max(count - pages_refs, 1)
 
 
@@ -478,9 +454,9 @@ def _get_generate_system(user_id):
 # ---------------------------------------------------------------------------
 
 def _generate_resume(user_id, jd_text, provider, api_key, model, base_yaml=None):
-    database = _read_file(_get_database_path(user_id))
-    rules = _read_file(_get_rules_path(user_id))
-    learnings = get_learnings(user_id)
+    database = documents.get_candidate_database(user_id)
+    rules = documents.get_resume_rules(user_id)
+    learnings = documents.get_resume_learnings(user_id)
 
     parts = [
         f"CANDIDATE DATABASE:\n{database}",
@@ -507,8 +483,8 @@ def _check_and_fit_pdf(yaml_content, user_id, jd_text, provider, api_key,
                        model, style=None, max_compress_rounds=2):
     style = style or DEFAULT_STYLE.copy()
     for attempt in range(max_compress_rounds + 1):
-        pdf_path = render_pdf(yaml_content, user_id, style)
-        pages = count_pdf_pages(pdf_path)
+        pdf_bytes = render_pdf_bytes(yaml_content, user_id, style)
+        pages = count_pdf_pages_from_bytes(pdf_bytes)
         if pages <= 1:
             return yaml_content, pages
         user_msg = (
@@ -522,8 +498,8 @@ def _check_and_fit_pdf(yaml_content, user_id, jd_text, provider, api_key,
             yaml_content = compressed
         except ValueError:
             break
-    pdf_path = render_pdf(yaml_content, user_id, style)
-    pages = count_pdf_pages(pdf_path)
+    pdf_bytes = render_pdf_bytes(yaml_content, user_id, style)
+    pages = count_pdf_pages_from_bytes(pdf_bytes)
     return yaml_content, pages
 
 
@@ -545,7 +521,7 @@ def score_resume_ats(yaml_content, jd_text, provider, api_key, model=None):
 # ---------------------------------------------------------------------------
 
 def _improve_resume(user_id, yaml_content, ats_result, jd_text, provider, api_key, model):
-    database = _read_file(_get_database_path(user_id))
+    database = documents.get_candidate_database(user_id)
     feedback = json.dumps(ats_result, indent=2)
     user_msg = (
         f"CURRENT RESUME (YAML):\n{yaml_content}\n\n"
@@ -638,7 +614,6 @@ def generate_resume_for_jd(user_id, jd_text, provider, api_key, model=None,
         tags=tags,
     )
     logs.append(f"Saved as version {version_id} with tags: {tags}")
-    render_pdf(yaml_content, user_id, style)
 
     return {
         'yaml': yaml_content,
@@ -658,10 +633,6 @@ def generate_resume_for_jd(user_id, jd_text, provider, api_key, model=None,
 # ---------------------------------------------------------------------------
 # Learning system
 # ---------------------------------------------------------------------------
-
-def _get_learnings_path(user_id):
-    return os.path.join(get_user_dir(user_id), 'resume_learnings.md')
-
 
 def diff_versions(agent_yaml, user_yaml):
     """Compare agent-generated YAML vs user-edited YAML."""
@@ -734,7 +705,6 @@ def _item_name(item):
 
 def save_learning(user_id, tags, changes, reason):
     from datetime import datetime
-    learnings_path = _get_learnings_path(user_id)
     entry_lines = [
         f"\n## Learning: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         f"**Tags:** {', '.join(tags)}",
@@ -764,22 +734,11 @@ def save_learning(user_id, tags, changes, reason):
     entry_lines.append("")
 
     entry = '\n'.join(entry_lines)
-    if os.path.exists(learnings_path):
-        with open(learnings_path, 'a', encoding='utf-8') as f:
-            f.write(entry)
-    else:
-        os.makedirs(os.path.dirname(learnings_path), exist_ok=True)
-        with open(learnings_path, 'w', encoding='utf-8') as f:
-            f.write("# Resume Generation Learnings\n\n")
-            f.write("Patterns learned from user edits to agent-generated resumes.\n")
-            f.write(entry)
+    documents.append_resume_learnings(user_id, entry)
 
 
 def get_learnings(user_id):
-    learnings_path = _get_learnings_path(user_id)
-    if os.path.exists(learnings_path):
-        return _read_file(learnings_path)
-    return ''
+    return documents.get_resume_learnings(user_id)
 
 
 def get_last_agent_version(user_id):
