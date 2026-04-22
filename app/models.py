@@ -104,9 +104,16 @@ def _execute(conn, query, params=()):
 # ---------------------------------------------------------------------------
 
 def init_db():
-    """Create tables and run migrations (idempotent)."""
+    """Create tables and run migrations (idempotent).
+
+    Guarded by a Postgres advisory lock so that multi-worker servers
+    (e.g. gunicorn --workers N) don't race on CREATE TABLE IF NOT EXISTS,
+    which doesn't itself lock the pg_class catalog.
+    """
     conn = get_db()
     cur = conn.cursor()
+    # Arbitrary bigint key -- all workers use the same one.
+    cur.execute("SELECT pg_advisory_xact_lock(%s)", (726154_8321_42,))
 
     cur.execute('''
         CREATE TABLE IF NOT EXISTS users (
