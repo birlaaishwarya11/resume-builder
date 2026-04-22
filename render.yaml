@@ -1,0 +1,21 @@
+# Render Blueprint -- auto-detected when you import this repo as a Blueprint
+# in the Render dashboard. Creates the web service with the right runtime,
+# region, and health check. Secrets are set via the dashboard after creation.
+services:
+  - type: web
+    name: resume-builder
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: ohio
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        sync: false    # set in dashboard -- use Neon pooled URL
+      - key: SECRET_KEY
+        sync: false
+      - key: FERNET_KEY
+        sync: false

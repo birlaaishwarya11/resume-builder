@@ -21,9 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create data directory (overlaid by persistent volume in production)
-RUN mkdir -p /app/data/defaults
-
 EXPOSE 8000
 
-CMD ["gunicorn", "app:create_app()", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+# Shell form so $PORT (set by Render/Fly/Railway) is expanded at runtime.
+CMD gunicorn "app:create_app()" --bind "0.0.0.0:${PORT:-8000}" --workers 2 --timeout 120
