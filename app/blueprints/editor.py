@@ -14,7 +14,6 @@ from flask import (
     send_file,
     url_for,
 )
-from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 
 from app.blueprints.helpers import (
@@ -22,14 +21,13 @@ from app.blueprints.helpers import (
     get_current_section_names,
     get_current_user_header,
     get_current_user_id,
+    get_current_user_settings,
     login_required,
-    md_bold,
     merge_header,
     strip_header,
 )
 from app.models import (
     get_user_by_id,
-    get_user_settings,
     is_onboarding_complete,
     save_feedback,
 )
@@ -50,23 +48,36 @@ BASE_DIR = os.path.dirname(_APP_DIR)
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
 
-# ---------------------------------------------------------------------------
-# Rendering helpers (shared by preview + download)
-# ---------------------------------------------------------------------------
+_DEFAULT_STYLE = {
+    'font_family': '"Times New Roman", Times, serif',
+    'font_size': '10pt',
+    'line_height': '1.2',
+    'margin': '0.4in',
+    'accent_color': '#000000',
+}
+
+
+def _style_with_defaults(saved_style):
+    """Apply DEFAULT_STYLE fallbacks to whatever is stored in settings.style."""
+    saved_style = saved_style or {}
+    return {k: saved_style.get(k, v) for k, v in _DEFAULT_STYLE.items()}
+
 
 def _render_resume_html(resume_yaml, style, header=None, section_names=None,
                         custom_sections=None):
-    """Parse YAML, merge header, and render resume.html to an HTML string."""
+    """Parse YAML, merge header, and render resume.html to an HTML string.
+
+    Uses Flask's app-level Jinja env (cached, with md_bold filter registered
+    in create_app) rather than constructing a new Environment per call.
+    """
     header = header or get_current_user_header()
     section_names = section_names or get_current_section_names()
     custom_sections = custom_sections or get_current_custom_sections()
 
     resume_data = merge_header(resume_yaml, header)
 
-    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
-    env.filters['md_bold'] = md_bold
-    template = env.get_template('resume.html')
-    return template.render(
+    return render_template(
+        'resume.html',
         resume=resume_data,
         style=style,
         section_names=section_names,
@@ -86,9 +97,15 @@ def index():
     if not is_onboarding_complete(user_id):
         return redirect(url_for('onboarding.onboarding_page'))
 
+    # These all read from the same per-request cached settings dict, so
+    # it's a single DB trip even though the call looks like four.
     header = get_current_user_header()
     section_names = get_current_section_names()
     custom_sections = get_current_custom_sections()
+    style = _style_with_defaults(
+        get_current_user_settings().get('style', {})
+    )
+
     user = get_user_by_id(user_id)
 
     current_yaml = get_current_resume(user_id)
@@ -99,17 +116,17 @@ def index():
     else:
         editable_data = {}
 
-    settings = get_user_settings(user_id)
-    saved_style = settings.get('style', {})
-    style = {
-        'font_family': saved_style.get('font_family', '"Times New Roman", Times, serif'),
-        'font_size': saved_style.get('font_size', '10pt'),
-        'line_height': saved_style.get('line_height', '1.2'),
-        'margin': saved_style.get('margin', '0.4in'),
-        'accent_color': saved_style.get('accent_color', '#000000'),
-    }
-
     resume_yaml = dump_yaml(editable_data) if editable_data else ''
+
+    # Pre-render the initial preview HTML server-side so the iframe has
+    # content on first paint -- saves one /api/preview round trip per page
+    # load when switching tabs.
+    initial_preview_html = _render_resume_html(
+        resume_yaml, style,
+        header=header,
+        section_names=section_names,
+        custom_sections=custom_sections,
+    )
 
     return render_template(
         'editor.html',
@@ -120,6 +137,7 @@ def index():
         custom_sections=custom_sections,
         user=user,
         has_resume=has_resume,
+        initial_preview_html=initial_preview_html,
     )
 
 
@@ -128,8 +146,13 @@ def index():
 def preview():
     """Render YAML + style to HTML (uses resume.html with md_bold filter)."""
     data = request.json
-    resume_yaml = data.get('resume', '')
-    style = data.get('style', {})
+    resume_yaml = data.get('yaml_content', '')
+    style = data.get('style') or {}
+
+    # Fall back to saved style from DB when no style is passed
+    if not style:
+        settings = get_current_user_settings()
+        style = _style_with_defaults(settings.get('style', {}))
 
     try:
         header = data.get('header') or get_current_user_header()
@@ -152,7 +175,7 @@ def preview():
 def save():
     """Save the current YAML as a new version in the database."""
     data = request.json
-    resume_yaml = data.get('resume', '')
+    resume_yaml = data.get('yaml_content', '')
     keyword = data.get('keyword', 'default')
 
     tags = data.get('tags') or None
@@ -185,15 +208,15 @@ def save():
 @login_required
 def download_pdf():
     """Render the resume to PDF via WeasyPrint and return as a file download."""
-    data = request.json
-    resume_yaml = data.get('resume', '')
-    style = data.get('style', {})
-    keyword = data.get('keyword', '')
-    inline = data.get('inline', False)
+    src = request.form if request.form else (request.json or {})
+    resume_yaml = src.get('yaml_content', '')
+    keyword = src.get('keyword', '')
+    inline = str(src.get('inline', '')).lower() in ('1', 'true', 'yes')
 
     try:
         user_id = get_current_user_id()
         user = get_user_by_id(user_id)
+        style = get_current_user_settings().get('style', {})
 
         html_content = _render_resume_html(resume_yaml, style)
         pdf_bytes = HTML(string=html_content, base_url=BASE_DIR).write_pdf()

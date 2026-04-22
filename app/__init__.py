@@ -43,6 +43,20 @@ def create_app(config_class=Config):
         traceback.print_exc()
         raise
 
+    # --- Template filters (shared across blueprints' render_template calls) ---
+    from app.blueprints.helpers import md_bold
+    app.jinja_env.filters['md_bold'] = md_bold
+
+    # --- Inject current user into all templates ---
+    @app.context_processor
+    def inject_user():
+        from flask import session as flask_session
+        user_id = flask_session.get('user_id')
+        if user_id:
+            from app.models import get_user_by_id
+            return {'user': get_user_by_id(user_id)}
+        return {'user': None}
+
     # --- Health check endpoint ---
     @app.route('/health')
     def health():
@@ -58,6 +72,7 @@ def create_app(config_class=Config):
     from app.blueprints.versions import bp as versions_bp
     from app.blueprints.onboarding import bp as onboarding_bp
     from app.blueprints.parsers import bp as parsers_bp
+    from app.blueprints.docs import bp as docs_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(editor_bp)
@@ -68,5 +83,6 @@ def create_app(config_class=Config):
     app.register_blueprint(versions_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(parsers_bp)
+    app.register_blueprint(docs_bp)
 
     return app

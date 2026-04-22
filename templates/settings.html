@@ -74,16 +74,67 @@
         </div>
     </div>
 
-    <!-- Databases links -->
+    <!-- Resume Styling -->
     <div class="card">
-        <div class="card-title">Databases & Rules</div>
-        <p class="text-muted text-sm mb-1">Edit your content databases in a full-screen editor.</p>
-        <div class="db-links">
-            <a href="{{ url_for('databases.candidate_page') }}" class="db-link">Candidate Database</a>
-            <a href="{{ url_for('databases.resume_rules_page') }}" class="db-link">Resume Rules</a>
-            <a href="{{ url_for('databases.cover_letter_db_page') }}" class="db-link">Cover Letter Database</a>
-            <a href="{{ url_for('databases.cover_letter_rules_page') }}" class="db-link">Cover Letter Rules</a>
+        <div class="card-title">Resume Styling</div>
+        <p class="text-muted text-sm mb-1">Control the look and feel of your rendered resume PDF.</p>
+        <div class="form-group">
+            <label>Font Family</label>
+            <select id="style-font-family">
+                <option value='"Times New Roman", Times, serif' {{ 'selected' if settings.style.font_family == '"Times New Roman", Times, serif' else '' }}>Times New Roman</option>
+                <option value='"Georgia", serif' {{ 'selected' if settings.style.font_family == '"Georgia", serif' else '' }}>Georgia</option>
+                <option value='"Garamond", serif' {{ 'selected' if settings.style.font_family == '"Garamond", serif' else '' }}>Garamond</option>
+                <option value='"Palatino Linotype", "Book Antiqua", Palatino, serif' {{ 'selected' if settings.style.font_family == '"Palatino Linotype", "Book Antiqua", Palatino, serif' else '' }}>Palatino</option>
+                <option value='"Arial", Helvetica, sans-serif' {{ 'selected' if settings.style.font_family == '"Arial", Helvetica, sans-serif' else '' }}>Arial</option>
+                <option value='"Helvetica Neue", Helvetica, Arial, sans-serif' {{ 'selected' if settings.style.font_family == '"Helvetica Neue", Helvetica, Arial, sans-serif' else '' }}>Helvetica</option>
+                <option value='"Calibri", "Gill Sans", sans-serif' {{ 'selected' if settings.style.font_family == '"Calibri", "Gill Sans", sans-serif' else '' }}>Calibri</option>
+                <option value='"Lato", sans-serif' {{ 'selected' if settings.style.font_family == '"Lato", sans-serif' else '' }}>Lato</option>
+            </select>
         </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Font Size</label>
+                <select id="style-font-size">
+                    <option value="9pt" {{ 'selected' if settings.style.font_size == '9pt' else '' }}>9pt</option>
+                    <option value="10pt" {{ 'selected' if settings.style.font_size == '10pt' or not settings.style.font_size else '' }}>10pt</option>
+                    <option value="10.5pt" {{ 'selected' if settings.style.font_size == '10.5pt' else '' }}>10.5pt</option>
+                    <option value="11pt" {{ 'selected' if settings.style.font_size == '11pt' else '' }}>11pt</option>
+                    <option value="12pt" {{ 'selected' if settings.style.font_size == '12pt' else '' }}>12pt</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Line Height</label>
+                <select id="style-line-height">
+                    <option value="1.0" {{ 'selected' if settings.style.line_height == '1.0' else '' }}>1.0 (Tight)</option>
+                    <option value="1.15" {{ 'selected' if settings.style.line_height == '1.15' else '' }}>1.15</option>
+                    <option value="1.2" {{ 'selected' if settings.style.line_height == '1.2' or not settings.style.line_height else '' }}>1.2 (Default)</option>
+                    <option value="1.3" {{ 'selected' if settings.style.line_height == '1.3' else '' }}>1.3</option>
+                    <option value="1.4" {{ 'selected' if settings.style.line_height == '1.4' else '' }}>1.4</option>
+                    <option value="1.5" {{ 'selected' if settings.style.line_height == '1.5' else '' }}>1.5 (Relaxed)</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Page Margins</label>
+                <select id="style-margin">
+                    <option value="0.3in" {{ 'selected' if settings.style.margin == '0.3in' else '' }}>0.3in (Narrow)</option>
+                    <option value="0.4in" {{ 'selected' if settings.style.margin == '0.4in' or not settings.style.margin else '' }}>0.4in (Default)</option>
+                    <option value="0.5in" {{ 'selected' if settings.style.margin == '0.5in' else '' }}>0.5in</option>
+                    <option value="0.6in" {{ 'selected' if settings.style.margin == '0.6in' else '' }}>0.6in</option>
+                    <option value="0.75in" {{ 'selected' if settings.style.margin == '0.75in' else '' }}>0.75in</option>
+                    <option value="1in" {{ 'selected' if settings.style.margin == '1in' else '' }}>1in (Wide)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Accent Color</label>
+                <div class="color-picker-row">
+                    <input type="color" id="style-accent-color" value="{{ settings.style.accent_color or '#000000' }}">
+                    <input type="text" id="style-accent-hex" value="{{ settings.style.accent_color or '#000000' }}" placeholder="#000000" class="mono-input">
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveStyle()">Save Styling</button>
     </div>
 
     <!-- Section Names -->
@@ -103,7 +154,7 @@
     <div class="card">
         <div class="card-title">Account</div>
         <p class="text-muted text-sm">{{ user.email }}</p>
-        <button class="btn btn-danger btn-sm mt-2" onclick="deleteAccount()">Delete Account</button>
+        <button class="btn btn-danger btn-sm mt-2" onclick="showDeleteModal()">Delete Account</button>
     </div>
 </div>
 

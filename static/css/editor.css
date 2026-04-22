@@ -9,7 +9,8 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    border-right: 1px solid #ddd;
+    border-right: 1px solid #ccc;
+    background: #f5f5f5;
 }
 
 .split-right {
@@ -17,17 +18,18 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #e8e8e8;
+    background: #525659;
 }
 
-/* Editor toolbar */
+/* Editor toolbar — matches SimpleLocalBuilder */
 .editor-toolbar {
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
     display: flex;
+    gap: 8px;
     align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    background: #fff;
-    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
     flex-shrink: 0;
 }
 
@@ -35,24 +37,29 @@
 .toolbar-right {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 }
 
-.toolbar-select {
-    padding: 4px 8px;
+input.toolbar-input {
+    padding: 5px 10px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 0.8em;
     font-family: inherit;
     background: #fff;
-    cursor: pointer;
+    width: 200px;
+}
+
+input.toolbar-input:focus {
+    outline: none;
+    border-color: #888;
 }
 
 /* Ace editor container */
 #ace-editor {
     flex: 1;
     width: 100%;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 /* Preview pane */
@@ -72,39 +79,18 @@
     display: flex;
     justify-content: center;
     padding: 20px;
+    background: #525659;
 }
 
-/* Resume iframe: scale 8.5" x 11" to fit */
+/* Resume iframe: 8.5" wide, grows with content, container scrolls */
 #preview-iframe {
     width: 8.5in;
-    height: 11in;
+    min-height: 11in;
     border: none;
     background: #fff;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
     transform-origin: top center;
     flex-shrink: 0;
-}
-
-/* Scale iframe to fit container */
-@media (max-height: 900px) {
-    #preview-iframe {
-        transform: scale(0.75);
-        margin-bottom: -25%;
-    }
-}
-
-@media (max-height: 750px) {
-    #preview-iframe {
-        transform: scale(0.6);
-        margin-bottom: -40%;
-    }
-}
-
-@media (max-width: 1200px) {
-    #preview-iframe {
-        transform: scale(0.65);
-        margin-bottom: -35%;
-    }
 }
 
 /* History list */

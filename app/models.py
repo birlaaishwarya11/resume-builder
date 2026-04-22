@@ -176,6 +176,15 @@ def init_db():
         )
     ''')
     cur.execute('''
+        CREATE TABLE IF NOT EXISTS cover_letter_versions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            yaml_content TEXT NOT NULL,
+            label TEXT DEFAULT NULL,
+            created_at TEXT NOT NULL
+        )
+    ''')
+    cur.execute('''
         CREATE TABLE IF NOT EXISTS jd_sessions (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -725,6 +734,56 @@ def delete_resume_version(version_id, user_id):
     _execute(
         conn,
         'DELETE FROM resume_versions WHERE id = %s AND user_id = %s',
+        (version_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_cover_letter_version(user_id, yaml_content, label=None):
+    now = datetime.now().isoformat()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        'INSERT INTO cover_letter_versions (user_id, yaml_content, label, created_at) '
+        'VALUES (%s,%s,%s,%s) RETURNING id',
+        (user_id, yaml_content, label, now),
+    )
+    version_id = cur.fetchone()[0]
+    cur.close()
+    conn.commit()
+    conn.close()
+    return version_id
+
+
+def list_cover_letter_versions(user_id):
+    conn = get_db()
+    rows = _fetchall(
+        conn,
+        'SELECT id, label, created_at FROM cover_letter_versions '
+        'WHERE user_id = %s ORDER BY created_at DESC',
+        (user_id,),
+    )
+    conn.close()
+    return rows
+
+
+def get_cover_letter_version(version_id, user_id):
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        'SELECT * FROM cover_letter_versions WHERE id = %s AND user_id = %s',
+        (version_id, user_id),
+    )
+    conn.close()
+    return row
+
+
+def delete_cover_letter_version(version_id, user_id):
+    conn = get_db()
+    _execute(
+        conn,
+        'DELETE FROM cover_letter_versions WHERE id = %s AND user_id = %s',
         (version_id, user_id),
     )
     conn.commit()

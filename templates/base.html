@@ -10,32 +10,134 @@
 <body>
     <nav id="top-nav">
         <div class="nav-left">
-            <a href="{{ url_for('editor.index') }}" class="nav-brand">Resume Builder</a>
-            <a href="{{ url_for('editor.index') }}" class="nav-link">Editor</a>
+            <a href="{{ url_for('docs.docs_page') }}" class="nav-brand">Resume Builder</a>
+            <a href="{{ url_for('editor.index') }}" class="nav-link">Resume Editor</a>
             <a href="{{ url_for('cover_letter.cover_letter_page') }}" class="nav-link">Cover Letter</a>
-            <div class="nav-dropdown">
-                <button class="nav-link nav-dropdown-trigger">Databases <span class="caret">&#9662;</span></button>
-                <div class="nav-dropdown-content">
-                    <a href="{{ url_for('databases.candidate_page') }}">Candidate Database</a>
-                    <a href="{{ url_for('databases.resume_rules_page') }}">Resume Rules</a>
-                    <a href="{{ url_for('databases.cover_letter_db_page') }}">Cover Letter Database</a>
-                    <a href="{{ url_for('databases.cover_letter_rules_page') }}">Cover Letter Rules</a>
-                </div>
-            </div>
-            <a href="{{ url_for('settings.settings_page') }}" class="nav-link">Settings</a>
         </div>
         <div class="nav-right">
-            <a href="{{ url_for('auth.logout') }}" class="nav-link">Logout</a>
+            {% if user %}
+            <div class="user-menu-wrapper">
+                <button class="user-menu-trigger" onclick="toggleUserMenu()">
+                    <span class="user-avatar">{{ user.name[0] if user.name else '?' }}</span>
+                    <span class="user-menu-name">{{ user.name }}</span>
+                    <span class="user-caret">&#9662;</span>
+                </button>
+                <div class="user-dropdown" id="user-dropdown">
+                    <div class="user-dropdown-header">
+                        <strong>{{ user.name }}</strong>
+                        <div class="user-dropdown-email">{{ user.email }}</div>
+                    </div>
+                    <div class="user-dropdown-divider"></div>
+                    <a class="user-dropdown-item" href="{{ url_for('settings.settings_page') }}">
+                        <span class="udi-icon">&#9881;</span> Settings
+                    </a>
+                    <div class="user-dropdown-divider"></div>
+                    <a class="user-dropdown-item user-dropdown-danger" href="#" onclick="event.preventDefault(); window.location.href='{{ url_for('auth.logout') }}';">
+                        <span class="udi-icon">&#8618;</span> Sign Out
+                    </a>
+                    <div class="user-dropdown-divider"></div>
+                    <a class="user-dropdown-item user-dropdown-danger" href="#" onclick="event.preventDefault(); toggleUserMenu(); showDeleteModal();">
+                        <span class="udi-icon">&#128465;</span> Delete Account
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <a href="{{ url_for('auth.login') }}" class="nav-link">Login</a>
+            {% endif %}
         </div>
     </nav>
 
     <div id="toast-container"></div>
+
+    <!-- Delete Account Modal -->
+    <div id="delete-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:3000; justify-content:center; align-items:center;">
+        <div style="background:white; width:440px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.2); overflow:hidden;">
+            <div style="padding:20px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; color:#c62828;">Delete Account</h3>
+                <span onclick="closeDeleteModal()" style="cursor:pointer; font-size:1.4em; color:#999;">&times;</span>
+            </div>
+            <div style="padding:24px;">
+                <div id="delete-step-1">
+                    <p style="color:#666; margin-top:0;">This will <strong>permanently delete</strong> your account and all resume data. This action cannot be undone.</p>
+                    <label style="display:block; font-size:0.85em; font-weight:600; color:#555; margin-bottom:6px;">Type <strong style="color:#c62828;">I agree to delete</strong> to confirm:</label>
+                    <input type="text" id="delete-confirm-text" placeholder="I agree to delete" style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.9em;">
+                    <button onclick="deleteStep1()" style="width:100%; margin-top:14px; background:#c62828; color:#fff; padding:10px; border:none; border-radius:6px; font-weight:600; cursor:pointer;">Continue</button>
+                </div>
+                <div id="delete-step-2" style="display:none;">
+                    <p style="color:#666; margin-top:0;">Enter your password to confirm deletion:</p>
+                    <input type="password" id="delete-password" placeholder="Your password" style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.9em;">
+                    <button onclick="deleteStep2()" style="width:100%; margin-top:14px; background:#c62828; color:#fff; padding:10px; border:none; border-radius:6px; font-weight:600; cursor:pointer;">Delete My Account</button>
+                </div>
+                <div id="delete-error" style="color:#c62828; font-size:0.85em; margin-top:10px; text-align:center;"></div>
+            </div>
+        </div>
+    </div>
 
     <main id="app-content">
         {% block content %}{% endblock %}
     </main>
 
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <script>
+    // --- User menu dropdown ---
+    function toggleUserMenu() {
+        var dd = document.getElementById('user-dropdown');
+        if (dd) dd.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.user-menu-wrapper')) {
+            var dd = document.getElementById('user-dropdown');
+            if (dd) dd.classList.remove('open');
+        }
+    });
+
+    // --- Delete account modal ---
+    function showDeleteModal() {
+        var m = document.getElementById('delete-modal');
+        m.style.display = 'flex';
+        document.getElementById('delete-confirm-text').value = '';
+        document.getElementById('delete-password').value = '';
+        document.getElementById('delete-error').textContent = '';
+        document.getElementById('delete-step-2').style.display = 'none';
+        document.getElementById('delete-step-1').style.display = 'block';
+    }
+    function closeDeleteModal() {
+        document.getElementById('delete-modal').style.display = 'none';
+    }
+    function deleteStep1() {
+        if (document.getElementById('delete-confirm-text').value.trim() !== 'I agree to delete') {
+            document.getElementById('delete-error').textContent = 'Please type exactly: I agree to delete';
+            return;
+        }
+        document.getElementById('delete-step-1').style.display = 'none';
+        document.getElementById('delete-step-2').style.display = 'block';
+        document.getElementById('delete-error').textContent = '';
+    }
+    function deleteStep2() {
+        var password = document.getElementById('delete-password').value;
+        if (!password) {
+            document.getElementById('delete-error').textContent = 'Please enter your password.';
+            return;
+        }
+        document.getElementById('delete-error').textContent = '';
+        fetch('/api/delete_profile', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ password: password })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'ok') {
+                window.location.href = '/login';
+            } else {
+                document.getElementById('delete-error').textContent = data.error || 'Deletion failed.';
+            }
+        })
+        .catch(function(err) {
+            document.getElementById('delete-error').textContent = 'Error: ' + err.message;
+        });
+    }
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

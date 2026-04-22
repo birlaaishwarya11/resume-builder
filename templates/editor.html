@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Editor - Resume Builder{% endblock %}
+{% block title %}Resume Editor - Resume Builder{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/editor.css') }}">
@@ -12,21 +12,16 @@
     <!-- Left pane: YAML editor -->
     <div class="split-left" id="editor-pane">
         <div class="editor-toolbar">
-            <div class="toolbar-left">
-                <button class="btn btn-primary btn-sm" id="btn-save" title="Save (Ctrl+S)">Save</button>
-                <button class="btn btn-secondary btn-sm" id="btn-download-pdf">Download PDF</button>
-                <select id="style-select" class="toolbar-select" title="Resume style">
-                    {% for s in style.available|default(['classic']) %}
-                    <option value="{{ s }}" {% if s == style.current|default('classic') %}selected{% endif %}>{{ s|capitalize }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="toolbar-right">
-                <button class="btn btn-secondary btn-sm" id="btn-jd-match" title="JD Match Panel">JD Match</button>
-                <button class="btn btn-secondary btn-sm" id="btn-history" title="Version History">History</button>
-            </div>
+            <input type="text" id="label-input" class="toolbar-input" maxlength="60"
+                   placeholder="Version keyword (e.g., 'tech')"
+                   title="Version label (also used in the downloaded PDF filename)">
+            <button class="btn btn-primary btn-sm" id="btn-save" title="Save (Ctrl+S)">Save Version</button>
+            <button class="btn btn-secondary btn-sm" id="btn-history" title="Version History">History</button>
+            <button class="btn btn-sm" id="btn-jd-match" title="JD Match Panel" style="background:#9b59b6; color:#fff;">JD Match</button>
+            <button class="btn btn-sm" id="btn-preview-pdf" style="background:#17a2b8; color:#fff;">Preview</button>
+            <button class="btn btn-sm" id="btn-download-pdf" style="background:#28a745; color:#fff;">Download PDF</button>
         </div>
-        <div id="ace-editor">{{ yaml_content }}</div>
+        <div id="ace-editor">{{ resume }}</div>
     </div>
 
     <!-- Right pane: Preview -->
@@ -36,7 +31,10 @@
             <span class="text-sm text-muted" id="page-count-badge"></span>
         </div>
         <div class="preview-container">
-            <iframe id="preview-iframe" sandbox="allow-same-origin"></iframe>
+            {#- srcdoc has the server-rendered preview so the iframe is
+                populated on first paint, avoiding a /api/preview round trip
+                on page load. Subsequent edits re-render via editor.js. -#}
+            <iframe id="preview-iframe" srcdoc="{{ initial_preview_html }}"></iframe>
         </div>
     </div>
 </div>
@@ -117,6 +115,17 @@
 
 <!-- Overlay for panels -->
 <div class="panel-overlay" id="panel-overlay"></div>
+
+<!-- Live PDF Preview Modal -->
+<div id="preview-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+    <div style="background:white; width:90%; height:90%; display:flex; flex-direction:column; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
+        <div style="padding:10px 16px; display:flex; justify-content:space-between; border-bottom:1px solid #ccc; align-items:center;">
+            <h3 style="margin:0; font-size:1em;">Live PDF Preview</h3>
+            <span id="preview-modal-close" style="cursor:pointer; font-size:1.5em; color:#666;">&times;</span>
+        </div>
+        <iframe id="preview-modal-frame" style="flex-grow:1; border:none; width:100%;"></iframe>
+    </div>
+</div>
 
 <!-- Section metadata for JS -->
 <script>

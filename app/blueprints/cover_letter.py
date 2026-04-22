@@ -1,52 +1,71 @@
 """Cover letter blueprint: editor page, generate, preview, download."""
 
 import io
-import os
 import traceback
+from datetime import datetime
+
 import yaml
 
 from flask import Blueprint, render_template, request, jsonify, send_file
-from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 
-from app.blueprints.helpers import login_required, get_current_user_id, md_bold
-from app.models import get_user_settings
+from app.blueprints.helpers import (
+    login_required, get_current_user_id, get_current_user_settings,
+)
+from app.models import (
+    delete_cover_letter_version,
+    get_cover_letter_version,
+    list_cover_letter_versions,
+    save_cover_letter_version,
+)
 from app.orchestrator import get_orchestrator
-from app.services import documents
 
 bp = Blueprint('cover_letter', __name__)
 
-_TEMPLATE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    'templates',
+_DUMMY_DRAFT = {
+    'salutation': 'Dear Hiring Manager,',
+    'paragraphs': [
+        "I'm excited to apply for the [Role] position at [Company]. With a "
+        "background in [your field] and a track record of [one concrete achievement], "
+        "I'm confident I can contribute from day one.",
+        "At [previous company], I led [project] that delivered [quantified impact]. "
+        "That experience taught me [skill] - directly relevant to what [Company] is "
+        "building.",
+        "I'd welcome the chance to talk about how I can help. Thank you for your "
+        "time and consideration.",
+    ],
+}
+
+_DUMMY_DRAFT_YAML = yaml.dump(
+    _DUMMY_DRAFT, default_flow_style=False, allow_unicode=True, sort_keys=False,
 )
-
-
-def _load_draft(user_id):
-    raw = documents.get_cover_letter_draft(user_id)
-    if not raw:
-        return {}
-    try:
-        return yaml.safe_load(raw) or {}
-    except Exception:
-        return {}
-
-
-def _save_draft(user_id, draft):
-    yaml_text = yaml.dump(
-        draft, default_flow_style=False, allow_unicode=True, sort_keys=False,
-    )
-    documents.save_cover_letter_draft(user_id, yaml_text)
 
 
 @bp.route('/cover-letter')
 @login_required
 def cover_letter_page():
-    user_id = get_current_user_id()
-    draft = _load_draft(user_id)
-    settings = get_user_settings(user_id)
-    return render_template('cover_letter_editor.html',
-                           draft=draft, settings=settings)
+    return render_template('cover_letter_editor.html', draft=_DUMMY_DRAFT_YAML)
+
+
+def _render_cover_letter_html(yaml_content: str) -> str:
+    try:
+        draft = yaml.safe_load(yaml_content) or {}
+        if not isinstance(draft, dict):
+            draft = {}
+    except yaml.YAMLError:
+        draft = {}
+
+    settings = get_current_user_settings()
+    header = settings.get('header') or {}
+
+    return render_template(
+        'cover_letter.html',
+        date=datetime.now().strftime('%B %d, %Y'),
+        salutation=draft.get('salutation', 'Dear Hiring Manager,'),
+        paragraphs=draft.get('paragraphs') or [],
+        name=header.get('name', ''),
+        contact=header.get('contact') or {},
+    )
 
 
 @bp.route('/api/cover_letter/generate', methods=['POST'])
@@ -65,34 +84,27 @@ def generate():
     try:
         orch = get_orchestrator(data, user_id)
         result = orch.generate_cover_letter(
-            jd_text, company, role_title=role, hiring_manager=hiring_manager
+            jd_text, company, role_title=role, hiring_manager=hiring_manager,
         )
 
-        text = result['text']
-        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        paragraphs = [p.strip() for p in result['text'].split('\n\n') if p.strip()]
 
         salutation = 'Dear Hiring Manager,'
         if paragraphs and paragraphs[0].lower().startswith('dear'):
             salutation = paragraphs.pop(0)
 
-        body_paragraphs = []
+        body = []
         for p in paragraphs:
-            if p.lower().startswith('sincerely') or p.lower().startswith('best regards'):
+            low = p.lower()
+            if low.startswith('sincerely') or low.startswith('best regards'):
                 break
-            body_paragraphs.append(p)
+            body.append(p)
 
-        draft = {
-            'salutation': salutation,
-            'paragraphs': body_paragraphs,
-        }
-
-        _save_draft(user_id, draft)
-
-        return jsonify({
-            'status': 'success',
-            'draft': draft,
-            'stories_used': result.get('stories_used', []),
-        })
+        draft = {'salutation': salutation, 'paragraphs': body}
+        yaml_text = yaml.dump(
+            draft, default_flow_style=False, allow_unicode=True, sort_keys=False,
+        )
+        return jsonify({'status': 'success', 'yaml': yaml_text})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -105,54 +117,82 @@ def generate():
 @bp.route('/api/cover_letter/preview', methods=['POST'])
 @login_required
 def preview():
-    user_id = get_current_user_id()
     data = request.json or {}
-    draft = data.get('draft', {})
-
-    settings = get_user_settings(user_id)
-    header = settings.get('header', {})
-    style = settings.get('style', {})
-
-    env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR))
-    env.filters['md_bold'] = md_bold
-    template = env.get_template('cover_letter.html')
-    html = template.render(
-        draft=draft, header=header, style=style,
-    )
-    return jsonify({'html': html})
+    yaml_content = data.get('yaml_content', '')
+    html = _render_cover_letter_html(yaml_content)
+    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 
 @bp.route('/api/cover_letter/download', methods=['POST'])
 @login_required
 def download():
-    user_id = get_current_user_id()
-    data = request.json or {}
-    draft = data.get('draft', {})
+    src = request.form if request.form else (request.json or {})
+    yaml_content = src.get('yaml_content', '')
+    keyword = (src.get('keyword') or '').strip()
 
-    settings = get_user_settings(user_id)
-    header = settings.get('header', {})
-    style = settings.get('style', {})
-
-    env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR))
-    env.filters['md_bold'] = md_bold
-    template = env.get_template('cover_letter.html')
-    html = template.render(draft=draft, header=header, style=style)
-
+    html = _render_cover_letter_html(yaml_content)
     pdf_bytes = HTML(string=html).write_pdf()
+
+    if keyword:
+        safe = ''.join(c for c in keyword if c.isalnum() or c in ('-', '_'))
+        download_name = f'cover_letter_{safe}.pdf' if safe else 'cover_letter.pdf'
+    else:
+        download_name = 'cover_letter.pdf'
+
     return send_file(
         io.BytesIO(pdf_bytes), mimetype='application/pdf',
-        as_attachment=True, download_name='cover_letter.pdf',
+        as_attachment=True, download_name=download_name,
     )
 
 
-@bp.route('/api/cover_letter/draft', methods=['GET', 'PUT'])
+@bp.route('/api/cover_letter/save', methods=['POST'])
 @login_required
-def draft():
+def save():
     user_id = get_current_user_id()
-
-    if request.method == 'GET':
-        return jsonify(_load_draft(user_id))
-
     data = request.json or {}
-    _save_draft(user_id, data)
+    yaml_content = data.get('yaml_content', '')
+    keyword = (data.get('keyword') or 'default').strip() or 'default'
+
+    try:
+        version_id = save_cover_letter_version(user_id, yaml_content, label=keyword)
+        return jsonify({
+            'status': 'success',
+            'message': f'Saved version {version_id}',
+            'version_id': version_id,
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/api/cover_letter/versions', methods=['GET'])
+@login_required
+def list_versions():
+    user_id = get_current_user_id()
+    return jsonify(list_cover_letter_versions(user_id))
+
+
+@bp.route('/api/cover_letter/versions/restore', methods=['POST'])
+@login_required
+def restore():
+    user_id = get_current_user_id()
+    data = request.json or {}
+    version_id = data.get('version_id')
+    if not version_id:
+        return jsonify({'error': 'version_id required'}), 400
+
+    row = get_cover_letter_version(version_id, user_id)
+    if not row:
+        return jsonify({'error': 'version not found'}), 404
+    return jsonify({'status': 'ok', 'yaml': row['yaml_content']})
+
+
+@bp.route('/api/cover_letter/versions/<int:version_id>', methods=['DELETE'])
+@login_required
+def delete_version(version_id):
+    user_id = get_current_user_id()
+    if not get_cover_letter_version(version_id, user_id):
+        return jsonify({'error': 'version not found'}), 404
+    delete_cover_letter_version(version_id, user_id)
     return jsonify({'status': 'ok'})
+
+

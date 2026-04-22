@@ -101,20 +101,38 @@ function saveSectionNames() {
     });
 }
 
-function deleteAccount() {
-    var password = prompt('Enter your password to confirm account deletion:');
-    if (!password) return;
-    fetch('/api/delete_profile', {
+function saveStyle() {
+    var style = {
+        font_family: document.getElementById('style-font-family').value,
+        font_size: document.getElementById('style-font-size').value,
+        line_height: document.getElementById('style-line-height').value,
+        margin: document.getElementById('style-margin').value,
+        accent_color: document.getElementById('style-accent-color').value,
+    };
+    fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password })
+        body: JSON.stringify({ style: style })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.status === 'ok') {
-            window.location.href = '/login';
-        } else {
-            showToast(data.error || 'Failed', 'error');
-        }
+        if (data.status === 'ok') showToast('Styling saved', 'success');
+        else showToast(data.error || 'Failed', 'error');
     });
 }
+
+// Sync accent color picker <-> hex input
+(function() {
+    var picker = document.getElementById('style-accent-color');
+    var hex = document.getElementById('style-accent-hex');
+    if (picker && hex) {
+        picker.addEventListener('input', function() { hex.value = picker.value; });
+        hex.addEventListener('input', function() {
+            if (/^#[0-9A-Fa-f]{6}$/.test(hex.value.trim())) {
+                picker.value = hex.value.trim();
+            }
+        });
+    }
+})();
+
+// deleteAccount is handled by the global modal in base.html (showDeleteModal)

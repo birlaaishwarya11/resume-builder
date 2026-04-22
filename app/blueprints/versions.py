@@ -4,7 +4,7 @@ import json
 from flask import Blueprint, request, jsonify
 
 from app.blueprints.helpers import login_required, get_current_user_id
-from app.models import list_resume_versions, update_version_tags
+from app.models import list_resume_versions, update_version_tags, delete_resume_version
 from app.services.resume import get_version, restore_version
 
 bp = Blueprint('versions', __name__)
@@ -34,6 +34,14 @@ def restore():
         return jsonify({'status': 'ok', 'yaml': yaml_content})
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
+
+
+@bp.route('/api/versions/<int:version_id>', methods=['DELETE'])
+@login_required
+def delete_version(version_id):
+    user_id = get_current_user_id()
+    delete_resume_version(version_id, user_id)
+    return jsonify({'status': 'ok', 'message': 'Version deleted.'})
 
 
 @bp.route('/api/versions/<int:version_id>/tags', methods=['PATCH'])

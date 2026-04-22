@@ -20,11 +20,10 @@ from app.models import (
     get_user_settings, is_onboarding_complete,
     mark_onboarding_complete, update_user_settings,
     DEFAULT_SECTION_NAMES, get_user_by_id,
-    get_user_api_config,
 )
+from app.orchestrator import resolve_ai_credentials
 from app.services.resume import save_current_resume, parse_yaml, dump_yaml
 from app.services.ai import call_llm, extract_ai_error
-from app.services.crypto import decrypt_api_key
 from app.parsers.pdf import (
     extract_text_local, extract_style_from_pdf,
     parse_resume_from_extracted, _smart_parse_section, _normalize_section_key,
@@ -45,43 +44,6 @@ bp = Blueprint('onboarding', __name__)
 def _onboarding_pdf_path(user_id: int) -> str:
     """Return a per-user tmp path for the uploaded PDF (onboarding only)."""
     return os.path.join(tempfile.gettempdir(), f'resume_builder_onboarding_{user_id}.pdf')
-
-
-def _resolve_ai_credentials(request_data: dict, user_id: int) -> tuple:
-    """Return (provider, api_key, model) from request body or DB.
-
-    Request body values override DB-stored config.  Raises ``ValueError``
-    if no API key is available from either source.
-    """
-    provider = (
-        request_data.get('provider')
-        or request_data.get('ai_provider')
-        or ''
-    ).strip()
-    api_key = (
-        request_data.get('api_key')
-        or request_data.get('ai_api_key')
-        or ''
-    ).strip()
-    model = (
-        request_data.get('model')
-        or request_data.get('ai_model')
-        or ''
-    ).strip() or None
-
-    if not api_key:
-        config = get_user_api_config(user_id)
-        if config and config.get('ai_api_key_encrypted'):
-            api_key = decrypt_api_key(config['ai_api_key_encrypted'])
-            provider = provider or config.get('provider') or 'anthropic'
-            model = model or config.get('model')
-
-    if not api_key:
-        raise ValueError(
-            "No API key configured. Set one in Settings or pass it in the request."
-        )
-
-    return provider or 'anthropic', api_key, model
 
 
 def _search_section_local(pdf_path: str, section_hint: str) -> dict:
@@ -163,7 +125,7 @@ def upload_resume():
         'ai_model': request.form.get('ai_model', ''),
     }
     try:
-        ai_provider, ai_api_key, ai_model = _resolve_ai_credentials(form_data, user_id)
+        ai_provider, ai_api_key, ai_model = resolve_ai_credentials(form_data, user_id)
     except ValueError:
         ai_provider, ai_api_key, ai_model = '', '', ''
 
@@ -354,7 +316,7 @@ def ai_change_request():
         }), 400
 
     try:
-        ai_provider, ai_api_key, ai_model = _resolve_ai_credentials(data, user_id)
+        ai_provider, ai_api_key, ai_model = resolve_ai_credentials(data, user_id)
     except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 

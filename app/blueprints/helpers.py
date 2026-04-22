@@ -3,7 +3,7 @@
 import re
 import yaml
 from functools import wraps
-from flask import session, redirect, url_for
+from flask import session, redirect, url_for, g, has_request_context
 
 from app.models import (
     get_user_settings, DEFAULT_SECTION_NAMES,
@@ -23,19 +23,40 @@ def get_current_user_id():
     return session.get('user_id')
 
 
+def get_current_user_settings():
+    """Fetch user_settings once per request, cached on flask.g.
+
+    Editor/cover-letter routes call get_current_user_header / _section_names /
+    _custom_sections together, each of which used to hit Postgres. A single
+    cached read collapses those 3-4 round trips into one.
+    """
+    if not has_request_context():
+        return get_user_settings(get_current_user_id())
+    cached = getattr(g, '_user_settings', None)
+    if cached is None:
+        cached = get_user_settings(get_current_user_id())
+        g._user_settings = cached
+    return cached
+
+
+def invalidate_current_user_settings():
+    """Drop the per-request cache after a write (settings.update, etc.)."""
+    if has_request_context() and hasattr(g, '_user_settings'):
+        del g._user_settings
+
+
 def get_current_user_header():
-    settings = get_user_settings(get_current_user_id())
-    return settings.get('header', {})
+    return get_current_user_settings().get('header', {})
 
 
 def get_current_section_names():
-    settings = get_user_settings(get_current_user_id())
-    return settings.get('section_names', DEFAULT_SECTION_NAMES.copy())
+    return get_current_user_settings().get(
+        'section_names', DEFAULT_SECTION_NAMES.copy()
+    )
 
 
 def get_current_custom_sections():
-    settings = get_user_settings(get_current_user_id())
-    return settings.get('custom_sections', [])
+    return get_current_user_settings().get('custom_sections', [])
 
 
 def md_bold(text):

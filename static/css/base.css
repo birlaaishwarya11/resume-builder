@@ -74,6 +74,72 @@ body {
 }
 .nav-dropdown-content a:hover { background: #f0f0f0; }
 
+/* User menu dropdown */
+.user-menu-wrapper { position: relative; }
+.user-menu-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #eee;
+    padding: 4px 10px 4px 4px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-family: inherit;
+    transition: background 0.15s;
+}
+.user-menu-trigger:hover { background: rgba(255,255,255,0.1); }
+.user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85em;
+    text-transform: uppercase;
+}
+.user-menu-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-caret { font-size: 0.7em; opacity: 0.7; }
+.user-dropdown {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    min-width: 240px;
+    z-index: 2000;
+    overflow: hidden;
+    color: #333;
+}
+.user-dropdown.open { display: block; }
+.user-dropdown-header { padding: 14px 16px; border-bottom: 1px solid #eee; }
+.user-dropdown-header strong { font-size: 0.95em; }
+.user-dropdown-email { font-size: 0.8em; color: #888; margin-top: 2px; }
+.user-dropdown-divider { height: 1px; background: #eee; }
+.user-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: #333;
+    text-decoration: none;
+    font-size: 0.88em;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.user-dropdown-item:hover { background: #f5f5f5; }
+.udi-icon { width: 20px; text-align: center; font-size: 1.1em; }
+.user-dropdown-danger { color: #c62828; }
+.user-dropdown-danger:hover { background: #fff5f5; }
+
 /* App content */
 #app-content { margin-top: 44px; }
 

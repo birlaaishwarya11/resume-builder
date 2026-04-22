@@ -12,6 +12,24 @@
     grid-template-columns: 1fr 1fr;
     gap: 12px;
 }
+.color-picker-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.color-picker-row input[type="color"] {
+    width: 36px;
+    height: 32px;
+    padding: 2px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.mono-input {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+}
 .db-links {
     display: grid;
     grid-template-columns: 1fr 1fr;

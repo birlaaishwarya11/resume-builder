@@ -2,7 +2,9 @@
 
 from flask import Blueprint, render_template, request, jsonify
 
-from app.blueprints.helpers import login_required, get_current_user_id
+from app.blueprints.helpers import (
+    login_required, get_current_user_id, invalidate_current_user_settings,
+)
 from app.models import (
     get_user_settings, update_user_settings,
     save_user_api_config, get_user_api_config, delete_user_api_config,
@@ -40,6 +42,7 @@ def api_settings():
         custom_sections=data.get('custom_sections'),
         style=data.get('style'),
     )
+    invalidate_current_user_settings()
     return jsonify({'status': 'ok'})
 
 

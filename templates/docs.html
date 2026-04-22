@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+
+{% block title %}Resume Builder{% endblock %}
+
+{% block head %}
+<style>
+  :root {
+    --rb-ink: #0f172a;
+    --rb-ink-soft: #334155;
+    --rb-muted: #64748b;
+    --rb-line: #e2e8f0;
+    --rb-line-soft: #eef2f7;
+    --rb-bg: #f7f8fb;
+    --rb-accent: #2f5bea;
+    --rb-accent-soft: #eef2ff;
+    --rb-card: #ffffff;
+    --rb-radius: 14px;
+  }
+
+  body { background: var(--rb-bg); }
+
+  .docs-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 48px;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 48px 28px 96px;
+  }
+
+  /* Main column */
+  .docs-main { min-width: 0; }
+  .docs-main h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--rb-ink);
+    margin: 0 0 12px;
+    line-height: 1.15;
+  }
+  .docs-main .lede {
+    color: var(--rb-ink-soft);
+    font-size: 1.12rem;
+    line-height: 1.55;
+    margin: 0 0 28px;
+    max-width: 58ch;
+  }
+  .docs-main section { scroll-margin-top: 72px; }
+  .docs-main h2 {
+    font-size: 1.4rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    color: var(--rb-ink);
+    margin: 56px 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rb-line);
+  }
+  .docs-main h3 {
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin: 22px 0 8px;
+    color: var(--rb-ink);
+  }
+  .docs-main p,
+  .docs-main li {
+    line-height: 1.65;
+    color: var(--rb-ink-soft);
+    font-size: 0.98rem;
+  }
+  .docs-main ol,
+  .docs-main ul { padding-left: 22px; }
+  .docs-main ol li,
+  .docs-main ul li { margin-bottom: 6px; }
+
+  /* Hero actions */
+  .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: transform 0.08s, box-shadow 0.15s, background 0.15s;
+  }
+  .cta-primary {
+    background: var(--rb-ink);
+    color: #fff;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 6px 16px rgba(15,23,42,0.12);
+  }
+  .cta-primary:hover { background: #1e293b; transform: translateY(-1px); }
+  .cta-ghost {
+    background: transparent;
+    color: var(--rb-ink);
+    border: 1px solid var(--rb-line);
+  }
+  .cta-ghost:hover { border-color: var(--rb-ink); }
+
+  /* Quickstart cards */
+  .steps {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+  .steps li {
+    counter-increment: step;
+    position: relative;
+    background: var(--rb-card);
+    border: 1px solid var(--rb-line);
+    border-radius: 10px;
+    padding: 18px 18px 16px 18px;
+    min-height: 110px;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--rb-ink);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700;
+  }
+  .steps li strong { display: block; color: var(--rb-ink); margin-bottom: 4px; font-weight: 600; }
+  .steps li span { font-size: 0.9rem; color: var(--rb-muted); line-height: 1.5; }
+
+  /* Pipeline */
+  .pipeline {
+    counter-reset: pstep;
+    list-style: none;
+    padding: 0;
+    border: 1px solid var(--rb-line);
+    border-radius: var(--rb-radius);
+    background: var(--rb-card);
+    overflow: hidden;
+  }
+  .pipeline li {
+    counter-increment: pstep;
+    position: relative;
+    padding: 16px 18px 16px 60px;
+    border-bottom: 1px solid var(--rb-line-soft);
+  }
+  .pipeline li:last-child { border-bottom: 0; }
+  .pipeline li::before {
+    content: counter(pstep);
+    position: absolute;
+    left: 18px; top: 17px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--rb-accent-soft);
+    color: var(--rb-accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem; font-weight: 700;
+  }
+  .pipeline .step-title {
+    display: block;
+    font-weight: 600;
+    color: var(--rb-ink);
+    margin-bottom: 2px;
+  }
+  .pipeline .step-body { color: var(--rb-ink-soft); font-size: 0.95rem; line-height: 1.55; }
+
+  /* Pills and notes */
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    background: var(--rb-accent-soft);
+    color: var(--rb-accent);
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    margin-right: 6px;
+    letter-spacing: 0.01em;
+  }
+  .note {
+    background: #fffaf0;
+    border: 1px solid #fde9b5;
+    border-left: 3px solid #d97706;
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin: 14px 0;
+    font-size: 0.93rem;
+    color: #5a3d0f;
+  }
+
+  /* Privacy grid */
+  .privacy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 14px 0 8px;
+  }
+  .privacy-card {
+    background: var(--rb-card);
+    border: 1px solid var(--rb-line);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .privacy-card h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: var(--rb-ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .privacy-card h4 .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #16a34a;
+  }
+  .privacy-card h4 .dot.warn { background: #d97706; }
+  .privacy-card p {
+    font-size: 0.9rem;
+    color: var(--rb-ink-soft);
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  /* FAQ */
+  .faq details {
+    background: var(--rb-card);
+    border: 1px solid var(--rb-line);
+    border-radius: 10px;
+    padding: 4px 14px;
+    margin-bottom: 8px;
+    transition: border-color 0.15s;
+  }
+  .faq details[open] { border-color: #cbd5e1; }
+  .faq summary {
+    cursor: pointer;
+    font-weight: 600;
+    padding: 12px 0;
+    color: var(--rb-ink);
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after {
+    content: '+';
+    font-size: 1.25rem;
+    color: var(--rb-muted);
+    transition: transform 0.15s;
+  }
+  .faq details[open] summary::after { content: '\2212'; }
+  .faq details > p {
+    padding: 0 0 14px 0;
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--rb-ink-soft);
+    line-height: 1.6;
+  }
+
+  /* Right-side navigator */
+  .docs-nav {
+    position: sticky;
+    top: 72px;
+    align-self: start;
+    max-height: calc(100vh - 92px);
+    overflow-y: auto;
+    padding: 18px 0 18px 20px;
+    border-left: 1px solid var(--rb-line);
+  }
+  .docs-nav .nav-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--rb-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .docs-nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .docs-nav a {
+    display: block;
+    padding: 6px 10px;
+    font-size: 0.88rem;
+    color: var(--rb-muted);
+    text-decoration: none;
+    border-radius: 6px;
+    border-left: 2px solid transparent;
+    margin-left: -12px;
+    padding-left: 10px;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .docs-nav a:hover { color: var(--rb-ink); background: var(--rb-line-soft); }
+  .docs-nav a.active {
+    color: var(--rb-ink);
+    font-weight: 600;
+    border-left-color: var(--rb-accent);
+    background: var(--rb-accent-soft);
+  }
+
+  /* Responsive: collapse the sidebar under content on narrow screens */
+  @media (max-width: 900px) {
+    .docs-shell { grid-template-columns: 1fr; gap: 24px; padding: 28px 20px 64px; }
+    .docs-nav {
+      position: static;
+      border-left: none;
+      border-top: 1px solid var(--rb-line);
+      padding: 18px 0 0;
+      max-height: none;
+      order: 2;
+    }
+    .docs-main h1 { font-size: 2rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="docs-shell">
+  <article class="docs-main">
+    <header>
+      <h1>Resume Builder</h1>
+      <p class="lede">
+        Upload your resume once. Paste any job description. Get a tailored,
+        ATS friendly PDF on one page, every time.
+      </p>
+      <div class="hero-actions">
+        {% if user %}
+          <a href="{{ url_for('editor.index') }}" class="cta cta-primary">Open the editor</a>
+          <a href="#pipeline" class="cta cta-ghost">How it works</a>
+        {% else %}
+          <a href="{{ url_for('auth.login') }}" class="cta cta-primary">Sign in to start</a>
+          <a href="#pipeline" class="cta cta-ghost">How it works</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <section id="quickstart">
+      <h2>Quickstart</h2>
+      <ol class="steps">
+        <li><strong>Upload your resume</strong><span>A PDF is parsed into structured sections: contact, summary, experience, education, skills, projects.</span></li>
+        <li><strong>Review the structure</strong><span>Fix anything the parser got wrong. Content can be polished later.</span></li>
+        <li><strong>Paste a JD</strong><span>Drop in a job description, a posting URL, or search by company and role.</span></li>
+        <li><strong>Generate</strong><span>The pipeline rewrites, verifies ATS fit, and iterates until it scores well and fits on one page.</span></li>
+        <li><strong>Download</strong><span>Export the PDF. Every save is versioned so you can roll back at any time.</span></li>
+      </ol>
+    </section>
+
+    <section id="pipeline">
+      <h2>How the pipeline works</h2>
+      <p>Pasting a JD triggers a seven stage pipeline. Each stage is swappable and logs its output so you can see what changed and why.</p>
+      <ol class="pipeline">
+        <li>
+          <span class="step-title">Pre-screen</span>
+          <span class="step-body">A local check (no LLM call) that the JD looks like a real job description, flagging obvious mismatches early.</span>
+        </li>
+        <li>
+          <span class="step-title">Version match</span>
+          <span class="step-body">Looks for an existing saved resume version tagged for a similar role, and reuses it if the overlap is strong.</span>
+        </li>
+        <li>
+          <span class="step-title">Generator</span>
+          <span class="step-body">The LLM rewrites your resume YAML targeting the JD, keeping factual bullets but reordering and rephrasing for relevance.</span>
+        </li>
+        <li>
+          <span class="step-title">PDF fit</span>
+          <span class="step-body">Renders the YAML to PDF via WeasyPrint. If it spills past one page, it compresses and re-checks. Everything happens in memory.</span>
+        </li>
+        <li>
+          <span class="step-title">ATS verify</span>
+          <span class="step-body">A separate LLM call scores the rendered resume against the JD on keyword coverage, seniority alignment, and structure.</span>
+        </li>
+        <li>
+          <span class="step-title">Improvement loop</span>
+          <span class="step-body">If the score is under 90, or the PDF is over one page, the loop tightens and re-verifies. It runs up to a few iterations.</span>
+        </li>
+        <li>
+          <span class="step-title">Tag and save</span>
+          <span class="step-body">The final version is saved with tags derived from the JD (company, role, seniority) so the version match stage can find it next time.</span>
+        </li>
+      </ol>
+    </section>
+
+    <section id="jd-inputs">
+      <h2>JD input formats</h2>
+      <ul>
+        <li><span class="pill">Text</span> Paste the job description as-is. The pipeline handles long, messy, copy pasted postings.</li>
+        <li><span class="pill">URL</span> Paste a job posting URL. We fetch, strip boilerplate, and extract the JD text server-side.</li>
+        <li><span class="pill">Search</span> Type a company and role (for example, <em>"Stripe senior backend engineer"</em>) and we'll find the posting.</li>
+      </ul>
+      <div class="note">
+        Some sites (LinkedIn, Greenhouse behind auth walls) will block the fetch. If a URL fails, paste the JD text instead.
+      </div>
+    </section>
+
+    <section id="styling">
+      <h2>Styling and versioning</h2>
+      <ul>
+        <li><strong>Style presets.</strong> Font family, size, line height, margins, and accent color are all adjustable in Settings. Changes render live in the editor preview.</li>
+        <li><strong>Version history.</strong> Every save creates a version. The History panel in the editor lets you view, diff, and restore any prior version.</li>
+        <li><strong>Custom sections.</strong> The parser detects non-standard sections (publications, awards, certifications) and preserves them. You can rename or reorder from Settings.</li>
+      </ul>
+    </section>
+
+    <section id="privacy">
+      <h2>Privacy and data handling</h2>
+      <p>
+        Your resume is personal data. We treat it that way. The goal of this product is
+        to keep your content under your control, and to keep the surface area of
+        where it travels as small as possible.
+      </p>
+
+      <h3>What we store, and where</h3>
+      <div class="privacy-grid">
+        <div class="privacy-card">
+          <h4><span class="dot"></span> Your content lives in Postgres</h4>
+          <p>Resume YAML, cover letter drafts, markdown rule databases, and resume learning logs are stored in a single Postgres database, scoped to your user account. Nothing is written to disk between requests.</p>
+        </div>
+        <div class="privacy-card">
+          <h4><span class="dot"></span> PDFs are ephemeral</h4>
+          <p>PDFs are rendered in memory by WeasyPrint at the moment you download or preview, then streamed to your browser. No rendered PDF is ever persisted on the server.</p>
+        </div>
+        <div class="privacy-card">
+          <h4><span class="dot"></span> API keys are encrypted at rest</h4>
+          <p>If you bring your own LLM provider key, it is encrypted with a server side Fernet key before being written to Postgres, and decrypted only when a request needs to call the provider.</p>
+        </div>
+        <div class="privacy-card">
+          <h4><span class="dot"></span> Auth and session isolation</h4>
+          <p>Every read and write is scoped to your authenticated user id. Your resume data, versions, and settings are never visible to other users or accounts.</p>
+        </div>
+        <div class="privacy-card">
+          <h4><span class="dot"></span> In transit</h4>
+          <p>Traffic to the app is served over HTTPS. Session cookies are signed with the server's secret key and are HTTP only, so they can't be read by browser scripts.</p>
+        </div>
+        <div class="privacy-card">
+          <h4><span class="dot"></span> No third-party analytics</h4>
+          <p>There are no tracking pixels, ad networks, or behavioral analytics on this site. We don't share your content with any third party outside the LLM calls described below.</p>
+        </div>
+      </div>
+
+      <h3>What leaves the server</h3>
+      <p>
+        When the pipeline runs, relevant excerpts of your resume and the pasted JD are
+        sent to the LLM provider you selected (for example, Anthropic or OpenAI) so
+        the model can do its work. That call is governed by the provider's data
+        policy, not ours. A few things to know:
+      </p>
+      <ul>
+        <li>We only send what the stage needs: the resume YAML, the JD text, and the prompt scaffolding around it. No credentials, no database dumps, and no other users' data.</li>
+        <li>If you bring your own API key, the request is billed to your account with the provider, and the provider treats the data according to their retention and training policies.</li>
+        <li>No background jobs call the LLM on your content. LLM calls happen only when you click a pipeline action (Generate, Analyze, Improve).</li>
+      </ul>
+
+      <h3>What we never do</h3>
+      <ul>
+        <li>We don't train any model on your resume, your cover letters, or your prompts.</li>
+        <li>We don't sell, rent, or share your data with marketers or data brokers.</li>
+        <li>We don't log full request or response bodies from the LLM in a way that is tied to your account beyond what is needed to show you the last pipeline run.</li>
+      </ul>
+
+      <h3>Deletion and export</h3>
+      <p>
+        Deleting your account (Settings, or the user menu in the top right)
+        permanently removes your resume YAML, cover letter drafts, rule databases,
+        version history, pipeline logs, and encrypted API keys from Postgres. There
+        is no soft delete. Once the row is gone, it is gone. If you just want to
+        start from a blank slate without deleting the account, you can wipe
+        individual documents from Settings.
+      </p>
+      <p>
+        YAML and markdown sources are the source of truth, so you can always copy
+        them out of the editor to keep a local backup.
+      </p>
+    </section>
+
+    <section id="faq">
+      <h2>FAQ</h2>
+      <div class="faq">
+        <details>
+          <summary>Can I bring my own API key?</summary>
+          <p>Yes. In Settings, under AI Configuration, pick a provider, paste a key, and choose a model. Keys are encrypted with a Fernet key on the server, and decrypted only when a request calls the provider.</p>
+        </details>
+        <details>
+          <summary>What happens if the parser misreads my resume?</summary>
+          <p>You can edit the structure directly after upload. The structure-first review step is designed for exactly this: fix section boundaries and field mappings before any LLM work runs.</p>
+        </details>
+        <details>
+          <summary>Does the pipeline hallucinate experience?</summary>
+          <p>The generator is prompted to preserve factual content and only rephrase or reorder. If a JD requires a skill you don't have, it won't be fabricated. You'll see lower ATS coverage instead.</p>
+        </details>
+        <details>
+          <summary>Can I export formats other than PDF?</summary>
+          <p>Not yet. The source of truth is YAML and rendering is WeasyPrint only today. DOCX export is a possible future addition.</p>
+        </details>
+        <details>
+          <summary>Where is my data stored physically?</summary>
+          <p>In the Postgres database configured for the deployment. On the default deployment that's a managed Postgres instance. If you self host, your data stays entirely within the database you provision.</p>
+        </details>
+        <details>
+          <summary>What gets deleted when I delete my account?</summary>
+          <p>Everything tied to your user id: resume YAML, cover letters, rule databases, version history, pipeline logs, and encrypted API keys. The delete is immediate and permanent.</p>
+        </details>
+      </div>
+    </section>
+  </article>
+
+  <aside class="docs-nav" aria-label="On this page">
+    <div class="nav-label">On this page</div>
+    <ul>
+      <li><a href="#quickstart">Quickstart</a></li>
+      <li><a href="#pipeline">How the pipeline works</a></li>
+      <li><a href="#jd-inputs">JD input formats</a></li>
+      <li><a href="#styling">Styling and versioning</a></li>
+      <li><a href="#privacy">Privacy and data handling</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+  </aside>
+</div>
+
+<script>
+  (function () {
+    var links = document.querySelectorAll('.docs-nav a[href^="#"]');
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      byId[id] = a;
+    });
+    var sections = Array.prototype.map.call(links, function (a) {
+      return document.getElementById(a.getAttribute('href').slice(1));
+    }).filter(Boolean);
+
+    function setActive(id) {
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (byId[id]) byId[id].classList.add('active');
+    }
+
+    if ('IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function (entries) {
+        var visible = entries
+          .filter(function (e) { return e.isIntersecting; })
+          .sort(function (a, b) { return a.target.offsetTop - b.target.offsetTop; });
+        if (visible.length) setActive(visible[0].target.id);
+      }, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+      sections.forEach(function (s) { observer.observe(s); });
+    }
+
+    links.forEach(function (a) {
+      a.addEventListener('click', function () { setActive(a.getAttribute('href').slice(1)); });
+    });
+
+    if (sections.length) setActive(sections[0].id);
+  })();
+</script>
+{% endblock %}

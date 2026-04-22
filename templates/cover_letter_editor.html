@@ -4,96 +4,135 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/editor.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/panels.css') }}">
 <style>
+    #cl-editor-pane { display: flex; flex-direction: column; }
+
     .cl-input-section {
-        padding: 16px;
+        padding: 12px 16px;
         border-bottom: 1px solid #e0e0e0;
         background: #fafafa;
+        flex-shrink: 0;
     }
     .cl-input-section .form-group { margin-bottom: 10px; }
+    .cl-input-section .form-group:last-child { margin-bottom: 0; }
     .cl-input-row {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         gap: 12px;
     }
-    .cl-actions {
-        display: flex;
-        gap: 8px;
-        padding: 12px 16px;
-        border-bottom: 1px solid #e0e0e0;
-        background: #fff;
-    }
-    .cl-editor-wrap {
-        flex: 1;
-        overflow: hidden;
-    }
+
     #cl-ace-editor {
+        flex: 1;
         width: 100%;
-        height: 100%;
         font-size: 13px;
     }
-    .cl-preview-frame {
-        width: 100%;
-        height: 100%;
+
+    .editor-toolbar .btn { white-space: nowrap; }
+
+    #cl-preview-iframe {
+        width: 8.5in;
+        min-height: 11in;
         border: none;
         background: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        flex-shrink: 0;
     }
-    .split-left { display: flex; flex-direction: column; }
+
+    .history-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+        justify-content: flex-end;
+    }
+    .history-actions .btn {
+        padding: 2px 10px;
+        font-size: 0.75em;
+    }
+    .history-date {
+        font-size: 0.75em;
+        color: #888;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 110px;
+    }
+    .history-item { cursor: default; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="split-pane">
-    <!-- Left pane: Inputs + YAML editor -->
-    <div class="split-left">
+<div class="split-pane" id="cl-split">
+    <!-- Left pane: inputs + toolbar + editor -->
+    <div class="split-left" id="cl-editor-pane">
         <div class="cl-input-section">
             <div class="cl-input-row">
                 <div class="form-group">
                     <label for="cl-company">Company</label>
-                    <input type="text" id="cl-company" placeholder="e.g. Anthropic" value="{{ settings.company|default('') }}">
+                    <input type="text" id="cl-company" placeholder="e.g. Anthropic">
                 </div>
                 <div class="form-group">
                     <label for="cl-role">Role</label>
-                    <input type="text" id="cl-role" placeholder="e.g. Software Engineer" value="{{ settings.role|default('') }}">
+                    <input type="text" id="cl-role" placeholder="e.g. Software Engineer">
                 </div>
                 <div class="form-group">
                     <label for="cl-hiring-manager">Hiring Manager</label>
-                    <input type="text" id="cl-hiring-manager" placeholder="e.g. Jane Smith (optional)" value="{{ settings.hiring_manager|default('') }}">
+                    <input type="text" id="cl-hiring-manager" placeholder="e.g. Jane Smith (optional)">
                 </div>
             </div>
             <div class="form-group">
                 <label for="cl-jd">Job Description</label>
-                <textarea id="cl-jd" rows="4" placeholder="Paste JD here for a tailored cover letter...">{{ settings.jd|default('') }}</textarea>
+                <textarea id="cl-jd" rows="3" placeholder="Paste the JD here to generate a tailored cover letter..."></textarea>
             </div>
         </div>
-        <div class="cl-actions">
-            <button class="btn btn-primary btn-sm" id="btn-cl-generate">Generate</button>
-            <button class="btn btn-secondary btn-sm" id="btn-cl-preview">Preview</button>
-            <button class="btn btn-secondary btn-sm" id="btn-cl-download">Download PDF</button>
-            <button class="btn btn-secondary btn-sm" id="btn-cl-save">Save Draft</button>
+
+        <div class="editor-toolbar">
+            <input type="text" id="cl-label-input" class="toolbar-input" maxlength="60"
+                   placeholder="Version keyword (e.g., 'tech')"
+                   title="Version label (also used in the downloaded PDF filename)">
+            <button class="btn btn-primary btn-sm" id="btn-cl-save" title="Save Version (Ctrl+S)">Save Version</button>
+            <button class="btn btn-secondary btn-sm" id="btn-cl-history" title="Version History">History</button>
+            <button class="btn btn-sm" id="btn-cl-generate" title="Generate from JD" style="background:#9b59b6; color:#fff;">Generate</button>
+            <button class="btn btn-sm" id="btn-cl-download" style="background:#28a745; color:#fff;">Download PDF</button>
         </div>
-        <div class="cl-editor-wrap">
-            <div id="cl-ace-editor">{{ draft|default('') }}</div>
-        </div>
+
+        <div id="cl-ace-editor">{{ draft }}</div>
     </div>
 
     <!-- Right pane: Live preview -->
-    <div class="split-right">
+    <div class="split-right" id="cl-preview-pane">
         <div class="preview-header">
-            <span class="text-sm text-muted">Cover Letter Preview</span>
+            <span class="text-sm text-muted">Live Preview</span>
+            <span class="text-sm text-muted" id="cl-page-count-badge"></span>
         </div>
         <div class="preview-container">
-            <iframe id="cl-preview-iframe" class="cl-preview-frame" sandbox="allow-same-origin"></iframe>
+            <iframe id="cl-preview-iframe" sandbox="allow-same-origin"></iframe>
         </div>
     </div>
 </div>
+
+<!-- History side panel -->
+<div class="side-panel" id="cl-history-panel">
+    <div class="panel-header">
+        <h3>Version History</h3>
+        <button class="panel-close" id="cl-history-panel-close">&times;</button>
+    </div>
+    <div class="panel-body">
+        <div id="cl-history-list" class="history-list">
+            <p class="text-sm text-muted">Loading versions...</p>
+        </div>
+    </div>
+</div>
+
+<div class="panel-overlay" id="cl-panel-overlay"></div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
 <script>
 (function() {
-    // Ace editor setup
+    'use strict';
+
     var editor = ace.edit('cl-ace-editor');
     editor.setTheme('ace/theme/chrome');
     editor.session.setMode('ace/mode/yaml');
@@ -105,24 +144,132 @@
         useSoftTabs: true
     });
 
-    function getInputs() {
-        return {
-            company: document.getElementById('cl-company').value,
-            role: document.getElementById('cl-role').value,
-            hiring_manager: document.getElementById('cl-hiring-manager').value,
-            jd: document.getElementById('cl-jd').value,
-        };
+    var PAGE_HEIGHT_PX = 11 * 96;
+
+    function getLabel() {
+        var el = document.getElementById('cl-label-input');
+        return el ? el.value.trim() : '';
     }
 
-    // Generate cover letter
-    document.getElementById('btn-cl-generate').onclick = function() {
+    // --- Preview ---
+    function resizePreview(iframe) {
+        var doc = iframe.contentDocument;
+        if (!doc || !doc.body) return;
+        var contentHeight = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
+        var pages = Math.max(1, Math.ceil(contentHeight / PAGE_HEIGHT_PX));
+        iframe.style.height = (pages * PAGE_HEIGHT_PX) + 'px';
+        var badge = document.getElementById('cl-page-count-badge');
+        if (badge) badge.textContent = pages + (pages === 1 ? ' page' : ' pages');
+    }
+
+    function updatePreview() {
+        fetch('/api/cover_letter/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yaml_content: editor.getValue() })
+        })
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        })
+        .then(function(html) {
+            var iframe = document.getElementById('cl-preview-iframe');
+            if (!iframe) return;
+            var doc = iframe.contentDocument;
+            doc.open();
+            doc.write(html);
+            doc.close();
+            setTimeout(function() { resizePreview(iframe); }, 50);
+        })
+        .catch(function(err) {
+            console.error('Preview failed:', err);
+            showToast('Preview failed: ' + err.message, 'error');
+        });
+    }
+
+    var previewTimer = null;
+    editor.session.on('change', function() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(updatePreview, 600);
+    });
+
+    setTimeout(updatePreview, 200);
+
+    // --- Save ---
+    function save() {
+        var keyword = getLabel();
+        var labelForMsg = keyword || 'default';
+        fetch('/api/cover_letter/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yaml_content: editor.getValue(), keyword: labelForMsg })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'error' || data.error) {
+                showToast(data.message || data.error, 'error');
+                return;
+            }
+            showToast('Saved version "' + labelForMsg + '"', 'success');
+        })
+        .catch(function(err) { showToast('Save failed: ' + err, 'error'); });
+    }
+
+    document.getElementById('btn-cl-save').addEventListener('click', save);
+
+    editor.commands.addCommand({
+        name: 'save',
+        bindKey: { win: 'Ctrl-S', mac: 'Cmd-S' },
+        exec: function() { save(); }
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            save();
+        }
+    });
+
+    // --- Download PDF ---
+    document.getElementById('btn-cl-download').addEventListener('click', function() {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/api/cover_letter/download';
+
+        var yamlInput = document.createElement('input');
+        yamlInput.type = 'hidden';
+        yamlInput.name = 'yaml_content';
+        yamlInput.value = editor.getValue();
+        form.appendChild(yamlInput);
+
+        var keyword = getLabel();
+        if (keyword) {
+            var kwInput = document.createElement('input');
+            kwInput.type = 'hidden';
+            kwInput.name = 'keyword';
+            kwInput.value = keyword;
+            form.appendChild(kwInput);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        form.remove();
+    });
+
+    // --- Generate ---
+    document.getElementById('btn-cl-generate').addEventListener('click', function() {
         var btn = this;
         btn.disabled = true;
         btn.textContent = 'Generating...';
         fetch('/api/cover_letter/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(getInputs())
+            body: JSON.stringify({
+                company: document.getElementById('cl-company').value,
+                role: document.getElementById('cl-role').value,
+                hiring_manager: document.getElementById('cl-hiring-manager').value,
+                jd_text: document.getElementById('cl-jd').value,
+            })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -133,65 +280,101 @@
         })
         .catch(function(err) { showToast('Generation failed: ' + err, 'error'); })
         .finally(function() { btn.disabled = false; btn.textContent = 'Generate'; });
-    };
+    });
 
-    // Preview
-    function updatePreview() {
-        fetch('/api/cover_letter/preview', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ yaml_content: editor.getValue() })
-        })
-        .then(function(r) { return r.text(); })
-        .then(function(html) {
-            var iframe = document.getElementById('cl-preview-iframe');
-            iframe.srcdoc = html;
-        })
-        .catch(function(err) { showToast('Preview failed: ' + err, 'error'); });
+    // --- History panel ---
+    var historyPanel = document.getElementById('cl-history-panel');
+    var historyClose = document.getElementById('cl-history-panel-close');
+    var btnHistory = document.getElementById('btn-cl-history');
+    var overlay = document.getElementById('cl-panel-overlay');
+
+    function closePanels() {
+        historyPanel.classList.remove('open');
+        overlay.classList.remove('visible');
     }
 
-    document.getElementById('btn-cl-preview').onclick = updatePreview;
+    btnHistory.addEventListener('click', function() {
+        var isOpen = historyPanel.classList.contains('open');
+        closePanels();
+        if (!isOpen) {
+            historyPanel.classList.add('open');
+            overlay.classList.add('visible');
+            loadHistory();
+        }
+    });
+    historyClose.addEventListener('click', closePanels);
+    overlay.addEventListener('click', closePanels);
 
-    // Save draft
-    document.getElementById('btn-cl-save').onclick = function() {
-        fetch('/api/cover_letter/save', {
+    function loadHistory() {
+        var listEl = document.getElementById('cl-history-list');
+        listEl.innerHTML = '<div class="panel-loading">Loading history...</div>';
+
+        fetch('/api/cover_letter/versions')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var versions = Array.isArray(data) ? data : (data.versions || []);
+            if (versions.length === 0) {
+                listEl.innerHTML = '<p class="text-sm text-muted">No saved versions yet.</p>';
+                return;
+            }
+            listEl.innerHTML = '';
+            versions.forEach(function(v) { listEl.appendChild(renderHistoryItem(v)); });
+        })
+        .catch(function(err) {
+            listEl.innerHTML = '<p class="text-sm" style="color:#c62828;">Failed to load history: ' + err + '</p>';
+        });
+    }
+
+    function renderHistoryItem(v) {
+        var item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML =
+            '<div class="history-meta">' +
+                '<span class="history-label"></span>' +
+                '<span class="history-date"></span>' +
+            '</div>' +
+            '<div class="history-actions">' +
+                '<button class="btn btn-secondary btn-sm js-restore">Restore</button>' +
+                '<button class="btn btn-secondary btn-sm js-delete">Delete</button>' +
+            '</div>';
+        item.querySelector('.history-label').textContent = v.label || ('Version ' + v.id);
+        item.querySelector('.history-date').textContent = v.created_at || '';
+        item.querySelector('.js-restore').addEventListener('click', function() {
+            restoreVersion(v.id, v.label);
+        });
+        item.querySelector('.js-delete').addEventListener('click', function() {
+            if (!confirm('Delete this version?')) return;
+            deleteVersion(v.id);
+        });
+        return item;
+    }
+
+    function restoreVersion(versionId, label) {
+        fetch('/api/cover_letter/versions/restore', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ yaml_content: editor.getValue() })
+            body: JSON.stringify({ version_id: versionId })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.error) { showToast(data.error, 'error'); return; }
-            showToast('Draft saved', 'success');
+            editor.setValue(data.yaml || '', -1);
+            updatePreview();
+            closePanels();
+            showToast('Loaded version: ' + (label || versionId), 'info');
         })
-        .catch(function(err) { showToast('Save failed: ' + err, 'error'); });
-    };
+        .catch(function(err) { showToast('Failed to load version: ' + err, 'error'); });
+    }
 
-    // Download PDF
-    document.getElementById('btn-cl-download').onclick = function() {
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/api/cover_letter/pdf';
-        var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'yaml_content';
-        input.value = editor.getValue();
-        form.appendChild(input);
-        document.body.appendChild(form);
-        form.submit();
-        form.remove();
-    };
-
-    // Auto-preview on editor change (debounced)
-    var previewTimer = null;
-    editor.session.on('change', function() {
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(updatePreview, 800);
-    });
-
-    // Initial preview
-    if (editor.getValue().trim()) {
-        updatePreview();
+    function deleteVersion(versionId) {
+        fetch('/api/cover_letter/versions/' + versionId, { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { showToast(data.error, 'error'); return; }
+            showToast('Deleted', 'success');
+            loadHistory();
+        })
+        .catch(function(err) { showToast('Delete failed: ' + err, 'error'); });
     }
 })();
 </script>
