@@ -302,16 +302,6 @@
                         <div class="confirm-icon">&#10003;</div>
                         <h2>Looking good!</h2>
                         <p>Your resume has been parsed and is ready to go. You can always edit it later in the full editor.</p>
-                        <div class="confirm-details">
-                            <dl>
-                                <dt>Name</dt>
-                                <dd id="confirm-name">--</dd>
-                                <dt>Sections found</dt>
-                                <dd id="confirm-sections">--</dd>
-                                <dt>Experience entries</dt>
-                                <dd id="confirm-experience">--</dd>
-                            </dl>
-                        </div>
                         <button class="btn btn-primary" id="btn-finish" style="width:100%;">Save &amp; Go to Editor</button>
                     </div>
                 </div>
@@ -380,7 +370,6 @@
             }
             if (step === 3) {
                 yamlContent = aceEditor ? aceEditor.getValue() : yamlContent;
-                populateConfirm();
             }
         }
 
@@ -401,27 +390,6 @@
                 document.getElementById('ob-preview-iframe').srcdoc = html;
             })
             .catch(function() {});
-        }
-
-        function populateConfirm() {
-            try {
-                var lines = yamlContent.split('\n');
-                var name = '--';
-                var sections = [];
-                var expCount = 0;
-                var inExp = false;
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i];
-                    if (/^name:\s*/.test(line)) name = line.replace(/^name:\s*/, '').replace(/['"]/g, '');
-                    if (/^\w[\w_]*:/.test(line) && !/^\s/.test(line)) sections.push(line.split(':')[0]);
-                    if (/^experience:/.test(line)) inExp = true;
-                    else if (inExp && /^  - /.test(line)) expCount++;
-                    else if (inExp && /^\w/.test(line)) inExp = false;
-                }
-                document.getElementById('confirm-name').textContent = name;
-                document.getElementById('confirm-sections').textContent = sections.join(', ');
-                document.getElementById('confirm-experience').textContent = expCount || '--';
-            } catch(e) {}
         }
 
         // File upload
