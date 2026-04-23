@@ -35,27 +35,71 @@ Your task: write a Python function called `parse` with this signature:
 
     def parse(lines: list[dict]) -> dict:
 
-The function must return a dict with the following keys (omit keys that have no data):
+The function MUST return a dict using EXACTLY the top-level keys and inner field
+names shown below. Do NOT invent new top-level keys or new field names inside
+entries. Map every piece of content to the closest existing field. If something
+genuinely does not fit any field, drop it.
 
-    {{
-      "name": str,
-      "contact": {{
-        "email": str, "phone": str, "location": str,
-        "linkedin": str, "github": str,
-        "portfolio_url": str, "portfolio_label": str
-      }},
-      "education":        [dict, ...],
-      "experience":       [dict, ...],
-      "technical_skills": [{{"category": str, "skills": str}}],
-      "projects":         [dict, ...],
-      "extracurricular":  {{"bullets": [str, ...]}},
-      "_section_headings": {{key: "EXACT HEADING TEXT FROM PDF", ...}}
+Top-level keys (omit any that have no data):
+
+    name               str
+    contact            dict (see schema below)
+    summary            str
+    education          list of education entries
+    experience         list of experience entries
+    technical_skills   list of {{category, skills}} dicts
+    projects           list of project entries
+    extracurricular    list of {{title, bullets}} dicts
+    _section_headings  dict mapping each emitted top-level section key
+                       to its EXACT heading text as it appears in the PDF
+
+Schemas:
+
+    contact = {{
+        "email", "phone", "location",
+        "linkedin", "github",
+        "portfolio_url", "portfolio_label"
+    }}
+
+    education entry = {{
+        "institution", "degree", "location", "date",
+        "gpa", "honors", "coursework"
+    }}
+
+    experience entry = {{
+        "company", "role", "location", "date",
+        "bullets": [str, ...]
+    }}
+
+    project entry = {{
+        "name", "subtitle", "event", "award",
+        "date", "url", "link_url", "link_text",
+        "bullets": [str, ...]
+    }}
+
+    extracurricular entry = {{
+        "title",
+        "bullets": [str, ...]
+    }}
+
+For any section whose heading does NOT match the canonical sections above,
+emit it under a top-level key derived from the heading (lowercased, words
+joined by underscores) and use this SAME entry shape for every entry in it:
+
+    custom entry = {{
+        "name", "subtitle", "date", "location",
+        "event", "award", "url", "link_url", "link_text",
+        "bullets": [str, ...]
     }}
 
 Rules:
 - NO import statements -- only Python builtins are available (re, json are pre-imported).
 - Use size and bold metadata to identify section headings for THIS specific resume.
 - Extract ALL content; do not summarise or omit any bullet point or detail.
+- Every entry MUST carry a non-empty primary identifier
+  (institution / company / name / title for its section) AND a `bullets`
+  list (empty list `[]` if there are no bullets).
+- Omit fields with no data; do NOT emit empty strings.
 - Normalise "Present"/"Current"/"Now"/"ongoing" in date strings to "Present".
 - Return an empty dict on total failure (wrap risky code in try/except).
 - The function must be completely self-contained.

@@ -98,6 +98,38 @@
   }
   .cta-ghost:hover { border-color: var(--rb-ink); }
 
+  .welcome-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--rb-accent-soft);
+    border: 1px solid #c7d2fe;
+    border-left: 3px solid var(--rb-accent);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 0 0 24px;
+    color: var(--rb-ink);
+    font-size: 0.95rem;
+  }
+  .welcome-banner .welcome-check {
+    flex: 0 0 auto;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--rb-accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+  .welcome-banner strong { color: var(--rb-ink); }
+
+  .section-cta {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+
   /* Quickstart cards */
   .steps {
     counter-reset: step;
@@ -326,6 +358,14 @@
 {% block content %}
 <div class="docs-shell">
   <article class="docs-main">
+    {% if user and request.args.get('welcome') %}
+    <div class="welcome-banner" role="status">
+      <span class="welcome-check" aria-hidden="true">&#10003;</span>
+      <div>
+        <strong>You're all set.</strong> Your resume is saved. Here's a quick tour of what you can do next.
+      </div>
+    </div>
+    {% endif %}
     <header>
       <h1>Resume Builder</h1>
       <p class="lede">
@@ -334,7 +374,8 @@
       </p>
       <div class="hero-actions">
         {% if user %}
-          <a href="{{ url_for('editor.index') }}" class="cta cta-primary">Open the editor</a>
+          <a href="{{ url_for('editor.index') }}" class="cta cta-primary">Edit resume</a>
+          <a href="{{ url_for('cover_letter.cover_letter_page') }}" class="cta cta-primary">Write cover letter</a>
           <a href="#pipeline" class="cta cta-ghost">How it works</a>
         {% else %}
           <a href="{{ url_for('auth.login') }}" class="cta cta-primary">Sign in to start</a>
@@ -352,6 +393,12 @@
         <li><strong>Generate</strong><span>The pipeline rewrites, verifies ATS fit, and iterates until it scores well and fits on one page.</span></li>
         <li><strong>Download</strong><span>Export the PDF. Every save is versioned so you can roll back at any time.</span></li>
       </ol>
+      {% if user %}
+      <div class="section-cta">
+        <a href="{{ url_for('editor.index') }}" class="cta cta-primary">Edit resume</a>
+        <a href="{{ url_for('cover_letter.cover_letter_page') }}" class="cta cta-primary">Write cover letter</a>
+      </div>
+      {% endif %}
     </section>
 
     <section id="pipeline">

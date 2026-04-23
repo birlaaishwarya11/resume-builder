@@ -121,6 +121,14 @@
             font-size: 18px;
             line-height: 1;
         }
+        .upload-status.warn .upload-spinner { display: none; }
+        .upload-status.warn::before {
+            content: '\26A0';
+            color: #c89b00;
+            font-size: 18px;
+            line-height: 1;
+        }
+        .upload-status.warn { color: #6b4f00; }
         .upload-spinner {
             width: 18px;
             height: 18px;
@@ -130,6 +138,86 @@
             animation: spin 0.6s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Step 1: Smart parser opt-in */
+        .smart-parser-toggle {
+            margin-top: 18px;
+            border: 1px solid #e3e6ea;
+            border-radius: 8px;
+            background: #fafbfc;
+        }
+        .smart-parser-toggle > summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 12px 16px;
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #374151;
+            user-select: none;
+        }
+        .smart-parser-toggle > summary::-webkit-details-marker { display: none; }
+        .smart-parser-toggle > summary::before {
+            content: '\25B8';
+            color: #6b7280;
+            margin-right: 6px;
+            display: inline-block;
+            transition: transform 0.15s;
+        }
+        .smart-parser-toggle[open] > summary::before { transform: rotate(90deg); }
+        .smart-parser-toggle .sp-help {
+            padding: 0 16px;
+            font-size: 0.82em;
+            color: #6b7280;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .smart-parser-toggle .sp-disclaimer {
+            margin: 0 16px 12px;
+            padding: 8px 12px;
+            background: #fff8e1;
+            border: 1px solid #f3d77c;
+            border-left: 3px solid #d69b00;
+            border-radius: 6px;
+            color: #6b4f00;
+            font-size: 0.78em;
+            line-height: 1.5;
+        }
+        .smart-parser-toggle .sp-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+            padding: 0 16px 16px;
+        }
+        .smart-parser-toggle .sp-grid label {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.72em;
+            color: #4b5563;
+            font-weight: 500;
+            gap: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .smart-parser-toggle .sp-grid .sp-wide { grid-column: 1 / -1; }
+        .smart-parser-toggle .sp-grid input,
+        .smart-parser-toggle .sp-grid select {
+            padding: 7px 10px;
+            border: 1px solid #d7dbe0;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-family: inherit;
+            background: #fff;
+            color: #1f2937;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+        .smart-parser-toggle .sp-grid input:focus,
+        .smart-parser-toggle .sp-grid select:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26,115,232,0.12);
+        }
 
         /* Step 2: Review (form-based) */
         .review-form-pane {
@@ -474,6 +562,68 @@
         .btn-add:hover { border-color: #1a73e8; color: #1a73e8; background: #f0f7ff; }
         .btn-add-entry { margin-top: 10px; width: 100%; }
 
+        .add-field-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+        .add-field-select {
+            font-size: 0.78em;
+            padding: 5px 8px;
+            border: 1px dashed #c8ccd1;
+            border-radius: 5px;
+            background: #fff;
+            color: #4b5563;
+            cursor: pointer;
+            font-family: inherit;
+            transition: border-color 0.12s, color 0.12s, background 0.12s;
+        }
+        .add-field-select:hover { border-color: #1a73e8; color: #1a73e8; background: #f0f7ff; }
+        .add-field-select:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.12); }
+
+        .btn-add-section {
+            margin-top: 18px;
+            width: 100%;
+            padding: 12px;
+            border: 1px dashed #c8ccd1;
+            border-radius: 8px;
+            background: #fff;
+            color: #4b5563;
+            font-size: 0.9em;
+            font-family: inherit;
+            font-weight: 500;
+            cursor: pointer;
+            transition: border-color 0.12s, color 0.12s, background 0.12s;
+        }
+        .btn-add-section:hover {
+            border-color: #1a73e8;
+            color: #1a73e8;
+            background: #f0f7ff;
+        }
+
+        .btn-delete-section {
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #9aa0a6;
+            cursor: pointer;
+            font-family: inherit;
+            margin-left: 8px;
+            transition: color 0.12s, background 0.12s, border-color 0.12s;
+        }
+        .btn-delete-section:hover {
+            color: #c0392b;
+            background: #fdf2f2;
+            border-color: #f5c2c7;
+        }
+        .btn-delete-section svg { width: 14px; height: 14px; pointer-events: none; }
+
         .empty-hint {
             font-size: 0.85em;
             color: #9aa0a6;
@@ -594,6 +744,38 @@
                         <div class="upload-spinner"></div>
                         <span id="upload-status-text">Parsing resume...</span>
                     </div>
+                    <details class="smart-parser-toggle" id="smart-parser-toggle">
+                        <summary>
+                            Use the AI smart parser (optional, for better results)
+                        </summary>
+                        <p class="sp-help">
+                            The smart parser asks an LLM to write a custom Python parser for your specific
+                            resume layout, which usually beats the built-in heuristic on unusual templates.
+                        </p>
+                        <p class="sp-help sp-disclaimer">
+                            Your API key stays in this browser session only. It is never written to the
+                            database or to disk. To save a key permanently, configure it in Settings after
+                            onboarding.
+                        </p>
+                        <div class="sp-grid">
+                            <label>
+                                Provider
+                                <select id="sp-provider">
+                                    <option value="anthropic">Anthropic (Claude)</option>
+                                    <option value="openai">OpenAI (GPT)</option>
+                                    <option value="gemini">Google (Gemini)</option>
+                                </select>
+                            </label>
+                            <label>
+                                API key
+                                <input type="password" id="sp-key" placeholder="sk-..." autocomplete="off">
+                            </label>
+                            <label class="sp-wide">
+                                Model (optional, use hyphens, not dots)
+                                <input type="text" id="sp-model" placeholder="e.g. claude-sonnet-4-6, gpt-4o, gemini-2.0-flash" autocomplete="off">
+                            </label>
+                        </div>
+                    </details>
                 </div>
             </div>
 
@@ -632,7 +814,7 @@
                         <iframe id="confirm-preview-iframe" sandbox="allow-same-origin"></iframe>
                     </div>
                     <div class="confirm-actions">
-                        <button class="btn btn-primary" id="btn-finish" style="width:100%;">Save &amp; Go to Editor</button>
+                        <button class="btn btn-primary" id="btn-finish" style="width:100%;">Save &amp; Continue</button>
                     </div>
                 </div>
             </div>
@@ -733,6 +915,32 @@
                 hasBullets: true
             }
         };
+
+        // Canonical field set for any custom section (LLM-emitted or
+        // user-added). The form schema is fixed; the LLM is asked to map
+        // resume content into this shape rather than invent its own fields.
+        var CUSTOM_SECTION_FIELDS = [
+            { key: 'name', label: 'Name', required: true },
+            { key: 'subtitle', label: 'Subtitle' },
+            { key: 'date', label: 'Date' },
+            { key: 'location', label: 'Location' },
+            { key: 'event', label: 'Event' },
+            { key: 'award', label: 'Award' },
+            { key: 'url', label: 'URL' },
+            { key: 'link_url', label: 'Link URL' },
+            { key: 'link_text', label: 'Link Text' }
+        ];
+
+        var BUILTIN_SECTION_KEYS = {
+            summary: 1, experience: 1, education: 1, projects: 1,
+            extracurricular: 1, technical_skills: 1
+        };
+
+        function slugifySectionKey(s) {
+            return String(s || '').toLowerCase()
+                .replace(/[^a-z0-9]+/g, '_')
+                .replace(/^_+|_+$/g, '');
+        }
 
         var MONTH_OPTIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -1203,6 +1411,24 @@
             return card;
         }
 
+        function makeSectionDeleteBtn(title, onDelete) {
+            var btn = h('button', {
+                type: 'button',
+                class: 'btn-delete-section',
+                title: 'Delete this section',
+                'aria-label': 'Delete this section'
+            });
+            btn.innerHTML = TRASH_SVG;
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!confirm('Delete the "' + title + '" section and all its entries?')) return;
+                onDelete();
+            });
+            btn.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+            return btn;
+        }
+
         function renderEntriesCard(sectionKey, title, entries, fieldDefs, opts) {
             opts = opts || {};
             var itemLabel = opts.itemLabel || 'Entry';
@@ -1213,10 +1439,14 @@
             var titleEl = makeEditableSectionTitle(title, function(newName) {
                 state.sectionNames[sectionKey] = newName;
             });
-            var summary = h('summary', null, [
+            var summaryChildren = [
                 titleEl,
                 h('span', { class: 'sec-count' }, [String(entries.length)])
-            ]);
+            ];
+            if (opts.onDeleteSection) {
+                summaryChildren.push(makeSectionDeleteBtn(title, opts.onDeleteSection));
+            }
+            var summary = h('summary', null, summaryChildren);
             card.appendChild(summary);
 
             var body = h('div', { class: 'sec-body' });
@@ -1226,12 +1456,22 @@
                 if (countEl) countEl.textContent = String(entries.length);
             }
 
+            function isFieldVisible(entry, f) {
+                if (f.type === 'date_range') return true;  // always show the date block
+                if (f.required) return true;
+                if (entry._shownFields && entry._shownFields[f.key]) return true;
+                var val = entry[f.key];
+                return val != null && String(val).trim() !== '';
+            }
+
             function renderEntries() {
                 body.innerHTML = '';
                 if (!entries.length) {
                     body.appendChild(h('div', { class: 'empty-hint' }, ['No entries yet.']));
                 }
                 entries.forEach(function(entry, idx) {
+                    if (!entry._shownFields) entry._shownFields = {};
+
                     var entryEl = h('div', { class: 'entry' });
                     entryEl.appendChild(h('div', { class: 'entry-head' }, [
                         h('span', { class: 'entry-label' }, [itemLabel + ' ' + (idx + 1)]),
@@ -1244,6 +1484,7 @@
                     ]));
                     var grid = h('div', { class: 'field-grid' });
                     fieldDefs.forEach(function(f) {
+                        if (!isFieldVisible(entry, f)) return;
                         if (f.type === 'date_range') {
                             grid.appendChild(renderDateRangeBlock(entry, !!f.endRequired));
                         } else {
@@ -1253,6 +1494,26 @@
                         }
                     });
                     entryEl.appendChild(grid);
+
+                    var hidden = fieldDefs.filter(function(f) {
+                        if (f.type === 'date_range' || f.required) return false;
+                        return !isFieldVisible(entry, f);
+                    });
+                    if (hidden.length) {
+                        var sel = h('select', { class: 'add-field-select' });
+                        sel.appendChild(h('option', { value: '' }, ['+ Add field']));
+                        hidden.forEach(function(f) {
+                            sel.appendChild(h('option', { value: f.key }, [f.label]));
+                        });
+                        sel.addEventListener('change', function() {
+                            if (!sel.value) return;
+                            entry._shownFields[sel.value] = true;
+                            renderEntries();
+                            schedulePreview();
+                        });
+                        entryEl.appendChild(h('div', { class: 'add-field-row' }, [sel]));
+                    }
+
                     if (hasBullets) {
                         if (!Array.isArray(entry.bullets)) entry.bullets = [];
                         entryEl.appendChild(bulletsEditor(entry.bullets, function() {}, { required: bulletsRequired }));
@@ -1263,7 +1524,7 @@
                     type: 'button',
                     class: 'btn-add btn-add-entry',
                     onclick: function() {
-                        var fresh = {};
+                        var fresh = { _shownFields: {} };
                         fieldDefs.forEach(function(f) {
                             if (f.type === 'date_range') { fresh.date = ''; }
                             else { fresh[f.key] = ''; }
@@ -1282,15 +1543,19 @@
             return card;
         }
 
-        function renderSkillsCard(sectionKey, title, entries) {
+        function renderSkillsCard(sectionKey, title, entries, onDeleteSection) {
             var card = h('details', { class: 'sec-card', open: entries.length ? '' : null, 'data-key': sectionKey });
             var titleEl = makeEditableSectionTitle(title, function(newName) {
                 state.sectionNames[sectionKey] = newName;
             });
-            var summary = h('summary', null, [
+            var summaryChildren = [
                 titleEl,
                 h('span', { class: 'sec-count' }, [String(entries.length)])
-            ]);
+            ];
+            if (onDeleteSection) {
+                summaryChildren.push(makeSectionDeleteBtn(title, onDeleteSection));
+            }
+            var summary = h('summary', null, summaryChildren);
             card.appendChild(summary);
 
             var body = h('div', { class: 'sec-body' });
@@ -1343,15 +1608,19 @@
             return card;
         }
 
-        function renderBulletsOnlyCard(sectionKey, title, bullets) {
+        function renderBulletsOnlyCard(sectionKey, title, bullets, onDeleteSection) {
             var card = h('details', { class: 'sec-card', open: bullets.length ? '' : null, 'data-key': sectionKey });
             var titleEl = makeEditableSectionTitle(title, function(newName) {
                 state.sectionNames[sectionKey] = newName;
             });
-            var summary = h('summary', null, [
+            var summaryChildren = [
                 titleEl,
                 h('span', { class: 'sec-count' }, [String(bullets.length)])
-            ]);
+            ];
+            if (onDeleteSection) {
+                summaryChildren.push(makeSectionDeleteBtn(title, onDeleteSection));
+            }
+            var summary = h('summary', null, summaryChildren);
             card.appendChild(summary);
             var body = h('div', { class: 'sec-body' });
             body.appendChild(bulletsEditor(bullets, function() {
@@ -1395,28 +1664,84 @@
                 var key = meta.key;
                 var title = state.sectionNames[key] || meta.display_name || key;
                 var data = state.body[key];
+                var deleteHandler = function() { removeCustomSection(key); };
                 if (meta.render_type === 'skills') {
                     state.body[key] = normalizeSkills(Array.isArray(data) ? data : []);
-                    formPane.appendChild(renderSkillsCard(key, title, state.body[key]));
+                    formPane.appendChild(renderSkillsCard(key, title, state.body[key], deleteHandler));
                 } else if (meta.render_type === 'bullets') {
                     state.body[key] = normalizeBulletsOnly(Array.isArray(data) ? data : []);
-                    formPane.appendChild(renderBulletsOnlyCard(key, title, state.body[key]));
+                    formPane.appendChild(renderBulletsOnlyCard(key, title, state.body[key], deleteHandler));
                 } else {
                     state.body[key] = normalizeEntries(Array.isArray(data) ? data : []);
                     formPane.appendChild(renderEntriesCard(
                         key,
                         title,
                         state.body[key],
-                        [
-                            { key: 'name', label: 'Name' },
-                            { key: 'subtitle', label: 'Subtitle' },
-                            { key: 'date', label: 'Date' },
-                            { key: 'location', label: 'Location' }
-                        ],
-                        { addLabel: 'Add entry', itemLabel: 'Entry', hasBullets: true }
+                        CUSTOM_SECTION_FIELDS,
+                        {
+                            addLabel: 'Add entry',
+                            itemLabel: 'Entry',
+                            hasBullets: true,
+                            bulletsRequired: true,
+                            onDeleteSection: deleteHandler
+                        }
                     ));
                 }
             });
+
+            var addBtn = h('button', {
+                type: 'button',
+                class: 'btn-add-section',
+                onclick: addCustomSectionPrompt
+            }, ['+ Add a custom section']);
+            formPane.appendChild(addBtn);
+        }
+
+        function addCustomSectionPrompt() {
+            var raw = window.prompt('Section name (e.g. "Awards", "Publications", "Volunteer Work"):');
+            if (raw == null) return;
+            var name = String(raw).trim();
+            if (!name) return;
+            var key = slugifySectionKey(name);
+            if (!key) {
+                alert('Please use letters or numbers in the section name.');
+                return;
+            }
+            if (BUILTIN_SECTION_KEYS[key]) {
+                alert('"' + name + '" is one of the built-in sections above. Use that one instead.');
+                return;
+            }
+            if (state.customSections.some(function(m) { return m.key === key; })) {
+                alert('A section called "' + name + '" already exists.');
+                return;
+            }
+            var displayName = name.toUpperCase();
+            state.customSections.push({
+                key: key,
+                display_name: displayName,
+                render_type: 'entries'
+            });
+            state.sectionNames[key] = displayName;
+            state.body[key] = [];
+            renderAllSections();
+            // Scroll the new card into view and focus its first input
+            setTimeout(function() {
+                var card = formPane.querySelector('[data-key="' + key + '"]');
+                if (!card) return;
+                if (card.tagName === 'DETAILS') card.open = true;
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                var firstInput = card.querySelector('input, textarea');
+                if (firstInput) firstInput.focus();
+            }, 0);
+        }
+
+        function removeCustomSection(key) {
+            state.customSections = state.customSections.filter(function(meta) {
+                return meta.key !== key;
+            });
+            delete state.body[key];
+            delete state.sectionNames[key];
+            renderAllSections();
         }
 
         function cleanEntry(entry, keepBullets) {
@@ -1572,6 +1897,17 @@
             var formData = new FormData();
             formData.append('resume_pdf', file);
 
+            var spProviderEl = document.getElementById('sp-provider');
+            var spKeyEl = document.getElementById('sp-key');
+            var spModelEl = document.getElementById('sp-model');
+            var spKey = spKeyEl ? spKeyEl.value.trim() : '';
+            if (spKey) {
+                formData.append('ai_provider', spProviderEl.value || 'anthropic');
+                formData.append('ai_api_key', spKey);
+                var spModel = spModelEl ? spModelEl.value.trim() : '';
+                if (spModel) formData.append('ai_model', spModel);
+            }
+
             fetch('/api/upload_resume', { method: 'POST', body: formData })
                 .then(function(r) {
                     var ct = r.headers.get('content-type') || '';
@@ -1583,6 +1919,7 @@
                     return r.json();
                 })
                 .then(function(data) {
+                    uploadStatus.classList.remove('done', 'warn', 'error');
                     if (data.status && data.status !== 'success' && data.status !== 'ai_parse_failed') {
                         document.getElementById('upload-status-text').textContent =
                             'Error: ' + (data.message || data.ai_error || 'Unknown error');
@@ -1613,12 +1950,27 @@
                         state.body[meta.key] = parsedBody[meta.key];
                     });
 
-                    var msg = 'Parsed successfully.';
+                    var PARSER_LABELS = {
+                        llm_judged: 'AI judge (heuristic + smart, merged)',
+                        smart_generated: 'AI smart parser (newly generated)',
+                        smart_active: 'AI smart parser (saved)',
+                        smart_locked: 'AI smart parser (locked)',
+                        heuristic: 'built-in parser'
+                    };
+                    var parserUsed = data.parser_used || 'heuristic';
+                    var parserLabel = PARSER_LABELS[parserUsed] || parserUsed;
+                    var spKeyProvided = !!(spKeyEl && spKeyEl.value.trim());
+                    var msg = 'Parsed successfully using the ' + parserLabel + '.';
+                    var statusClass = 'done';
                     if (data.status === 'ai_parse_failed' && data.ai_error) {
-                        msg = 'Parsed with heuristic fallback (AI parser: ' + data.ai_error + ')';
+                        msg = 'Used the built-in parser. The AI smart parser failed: ' + data.ai_error;
+                        statusClass = 'warn';
+                    } else if (spKeyProvided && parserUsed === 'heuristic') {
+                        msg = 'Used the built-in parser. The AI smart parser produced no usable output for this resume.';
+                        statusClass = 'warn';
                     }
                     document.getElementById('upload-status-text').textContent = msg;
-                    uploadStatus.classList.add('done');
+                    uploadStatus.classList.add(statusClass);
                     hasParsedResume = true;
                     btnNext.disabled = false;
                 })
@@ -1669,15 +2021,15 @@
                 if (data.status !== 'success') {
                     alert('Save failed: ' + (data.message || 'unknown'));
                     finishBtn.disabled = false;
-                    finishBtn.textContent = 'Save & Go to Editor';
+                    finishBtn.textContent = 'Save & Continue';
                     return;
                 }
-                window.location.href = '/';
+                window.location.href = '/docs?welcome=1#quickstart';
             })
             .catch(function(err) {
                 alert('Save failed: ' + err);
                 finishBtn.disabled = false;
-                finishBtn.textContent = 'Save & Go to Editor';
+                finishBtn.textContent = 'Save & Continue';
             });
         });
 

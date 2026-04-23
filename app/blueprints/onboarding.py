@@ -30,6 +30,7 @@ from app.parsers.pdf import (
 )
 from app.parsers.confidence import score_parsed_resume
 from app.parsers.smart import normalize_dates, resolve_parser_credentials
+from app.parsers.judge import judge_and_merge
 import app.services.parser as parser_service
 
 logger = logging.getLogger(__name__)
@@ -154,9 +155,13 @@ def upload_resume():
             ai_provider, ai_api_key, ai_model,
         )
 
-        parsed = None
+        # Always run the heuristic. It's local, fast, deterministic, and acts
+        # as both the no-key fallback and the second opinion for the judge.
+        heuristic_parsed = parse_resume_from_extracted(extracted_data)
+
+        smart_parsed = None
+        smart_source = None  # 'locked' | 'active' | 'generated'
         ai_error_info = None
-        parser_used = 'heuristic'
         generated_parser_code = None
 
         best_parser = parser_service.get_best_parser(user_id)
@@ -181,8 +186,8 @@ def upload_resume():
                     _locked_parsed = None
 
                 if has_meaningful_content(_locked_parsed):
-                    parsed = normalize_dates(_locked_parsed)
-                    parser_used = 'smart_locked'
+                    smart_parsed = normalize_dates(_locked_parsed)
+                    smart_source = 'locked'
                 else:
                     logger.warning("[SmartParser] Locked parser returned no content, regenerating...")
                     best_parser = None
@@ -193,15 +198,14 @@ def upload_resume():
                     provider=sp_provider, api_key=sp_api_key, model=sp_model,
                 )
                 if has_meaningful_content(result):
-                    parsed = normalize_dates(result)
-                    parser_used = 'smart_active'
+                    smart_parsed = normalize_dates(result)
+                    smart_source = 'active'
                 else:
                     logger.warning(
-                        "[SmartParser] Active parser returned no content, falling back to heuristic"
+                        "[SmartParser] Active parser returned no content"
                     )
-                    parsed = parse_resume_from_extracted(extracted_data)
 
-        if not best_parser and sp_provider and sp_api_key:
+        if smart_parsed is None and sp_provider and sp_api_key:
             logger.info("[SmartParser] Generating new parser for user %s", user_id)
             try:
                 with open(pdf_path, 'rb') as pf:
@@ -215,17 +219,15 @@ def upload_resume():
                     provider=sp_provider, api_key=sp_api_key, model=sp_model,
                 )
                 if has_meaningful_content(result):
-                    parsed = normalize_dates(result)
-                    parser_used = 'smart_generated'
+                    smart_parsed = normalize_dates(result)
+                    smart_source = 'generated'
                     generated_parser_code = final_code
                     logger.info("[SmartParser] Parser accepted (DRAFT id=%s)", parser_id)
                 else:
                     logger.warning(
-                        "[SmartParser] Parser returned only header fields %s, "
-                        "falling back to heuristic",
+                        "[SmartParser] Parser returned only header fields %s",
                         list((result or {}).keys()),
                     )
-                    parsed = parse_resume_from_extracted(extracted_data)
             except Exception as exc:
                 ai_error_info = extract_ai_error(exc)
                 logger.error(
@@ -233,10 +235,33 @@ def upload_resume():
                     ai_error_info['message'],
                     exc_info=True,
                 )
-                parsed = parse_resume_from_extracted(extracted_data)
 
-        if parsed is None:
-            parsed = parse_resume_from_extracted(extracted_data)
+        # Decide the final parse: judge if both a smart output AND credentials
+        # are available, otherwise prefer smart-when-meaningful, else heuristic.
+        parser_used = 'heuristic'
+        parsed = heuristic_parsed
+
+        if smart_parsed is not None and sp_provider and sp_api_key:
+            try:
+                judged = judge_and_merge(
+                    heuristic_parsed, smart_parsed, raw_text,
+                    sp_provider, sp_api_key, sp_model,
+                )
+                if has_meaningful_content(judged):
+                    parsed = normalize_dates(judged)
+                    parser_used = 'llm_judged'
+                    logger.info("[Judge] Merged heuristic + smart (source=%s)", smart_source)
+                else:
+                    parsed = smart_parsed
+                    parser_used = 'smart_' + (smart_source or 'unknown')
+                    logger.warning("[Judge] Returned no usable content; using smart output")
+            except Exception as exc:
+                logger.warning("[Judge] Failed: %s; using smart output", exc)
+                parsed = smart_parsed
+                parser_used = 'smart_' + (smart_source or 'unknown')
+        elif smart_parsed is not None:
+            parsed = smart_parsed
+            parser_used = 'smart_' + (smart_source or 'unknown')
 
         if not parsed:
             return jsonify({
