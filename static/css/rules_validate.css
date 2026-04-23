@@ -1,0 +1,123 @@
+/* Rules-validate panel shown between the toggles row and the split editor */
+.rv-panel {
+    padding: 12px 16px 14px;
+    background: #fafbfc;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rv-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.rv-summary {
+    font-size: 0.9em;
+    color: #333;
+    line-height: 1.35;
+    flex: 1;
+}
+
+.rv-dismiss {
+    /* reuses .btn .btn-secondary .btn-sm for sizing; no extra styles needed */
+}
+
+.rv-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rv-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid #e6e6e6;
+    border-left-width: 4px;
+    border-radius: 5px;
+    background: #fff;
+    font-size: 0.88em;
+    color: #333;
+}
+
+.rv-card-ok {
+    border-left-color: #2f9e44;
+    background: #f3fbf4;
+}
+
+.rv-card-warn {
+    border-left-color: #d9a404;
+    background: #fffaf0;
+}
+
+.rv-card-reject {
+    border-left-color: #c92a2a;
+    background: #fff5f5;
+}
+
+.rv-card-info {
+    border-left-color: #868e96;
+    background: #f8f9fa;
+    color: #555;
+}
+
+.rv-sev {
+    display: inline-block;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+    align-self: flex-start;
+}
+
+.rv-sev-warn {
+    background: #fcefc7;
+    color: #8a5700;
+}
+
+.rv-sev-reject {
+    background: #ffe3e3;
+    color: #a52020;
+}
+
+.rv-snippet {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85em;
+    background: rgba(0, 0, 0, 0.04);
+    padding: 6px 8px;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.rv-reason, .rv-suggestion {
+    line-height: 1.4;
+}
+
+.rv-reason strong, .rv-suggestion strong {
+    color: #222;
+}
+
+/* Button spinner while Check rules is in flight */
+.rv-spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: rv-spin 0.7s linear infinite;
+    vertical-align: -1px;
+}
+
+@keyframes rv-spin {
+    to { transform: rotate(360deg); }
+}

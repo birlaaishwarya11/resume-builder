@@ -10,11 +10,25 @@ from flask import Blueprint, request, jsonify
 from app.blueprints.helpers import login_required, get_current_user_id
 from app.orchestrator import get_orchestrator
 from app.services.resume import get_current_resume
+from app.services.url_safety import assert_safe_url, UnsafeURLError
+from app.agents.safety import MAX_EXTERNAL_TEXT_BYTES, cap_external_text
 import app.services.jd as jd_service
 import app.agents.jd_resume as jd_resume_agent
 import app.agents.jd_finder as jd_finder_agent
 
 bp = Blueprint('jd', __name__)
+
+
+def _accept_jd_text(jd_text):
+    """Reject empty or oversized JD payloads at the API boundary."""
+    if not jd_text:
+        return None, (jsonify({'error': 'jd_text is required'}), 400)
+    if len(jd_text.encode('utf-8')) > MAX_EXTERNAL_TEXT_BYTES:
+        kb = MAX_EXTERNAL_TEXT_BYTES // 1024
+        return None, (jsonify({
+            'error': f'jd_text exceeds {kb} KB limit; trim before submitting',
+        }), 413)
+    return cap_external_text(jd_text), None
 
 
 @bp.route('/api/jd_analyze', methods=['POST'])
@@ -23,9 +37,9 @@ def jd_analyze():
     """Analyze current resume against a JD. Returns match score + suggestions."""
     user_id = get_current_user_id()
     data = request.json or {}
-    jd_text = (data.get('jd_text') or '').strip()
-    if not jd_text:
-        return jsonify({'error': 'jd_text is required'}), 400
+    jd_text, err = _accept_jd_text((data.get('jd_text') or '').strip())
+    if err:
+        return err
 
     try:
         orch = get_orchestrator(data, user_id)
@@ -84,9 +98,9 @@ def jd_generate():
     """Full 7-stage agent pipeline: generate tailored resume from JD."""
     user_id = get_current_user_id()
     data = request.json or {}
-    jd_text = (data.get('jd_text') or '').strip()
-    if not jd_text:
-        return jsonify({'error': 'jd_text is required'}), 400
+    jd_text, err = _accept_jd_text((data.get('jd_text') or '').strip())
+    if err:
+        return err
 
     try:
         orch = get_orchestrator(data, user_id)
@@ -113,12 +127,20 @@ def jd_find():
     role = (data.get('role') or '').strip()
     url = (data.get('url') or '').strip()
 
+    # SSRF guard runs BEFORE credential resolution in URL mode: a private-IP
+    # or non-http URL must be rejected even if the user has no API key, so
+    # the refusal isn't masked by a "missing key" error.
+    if mode == 'url' and url:
+        try:
+            assert_safe_url(url)
+        except UnsafeURLError as e:
+            return jsonify({'error': f'Refused to fetch URL: {e}'}), 400
+
     try:
         orch = get_orchestrator(data, user_id)
 
         if mode == 'url' and url:
-            # Fetch page content
-            resp = requests.get(url, timeout=15, headers={
+            resp = requests.get(url, timeout=15, allow_redirects=False, headers={
                 'User-Agent': 'Mozilla/5.0 (compatible; ResumeBuilder/1.0)'
             })
             resp.raise_for_status()
@@ -215,9 +237,9 @@ def match_jd():
     """Quick ATS score of current resume against JD."""
     user_id = get_current_user_id()
     data = request.json or {}
-    jd_text = (data.get('jd_text') or '').strip()
-    if not jd_text:
-        return jsonify({'error': 'jd_text is required'}), 400
+    jd_text, err = _accept_jd_text((data.get('jd_text') or '').strip())
+    if err:
+        return err
 
     try:
         orch = get_orchestrator(data, user_id)

@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Database Builder - Resume Builder{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/database_builder.css') }}">
+{% endblock %}
+{% block content %}
+<div class="dbb-container">
+    <!-- Progress indicator -->
+    <div class="dbb-progress" role="navigation" aria-label="Wizard progress">
+        <div class="dbb-step-indicator">
+            <div class="dbb-dot active" id="dbb-dot-1" aria-label="Step 1: Sources">1</div>
+            <div class="dbb-line" id="dbb-line-1"></div>
+            <div class="dbb-dot" id="dbb-dot-2" aria-label="Step 2: Q&amp;A">2</div>
+            <div class="dbb-line" id="dbb-line-2"></div>
+            <div class="dbb-dot" id="dbb-dot-3" aria-label="Step 3: Review &amp; Save">3</div>
+        </div>
+        <div class="dbb-step-labels">
+            <div class="dbb-step-label active" id="dbb-label-1">Sources</div>
+            <div class="dbb-step-label" id="dbb-label-2">Questions</div>
+            <div class="dbb-step-label" id="dbb-label-3">Review &amp; Save</div>
+        </div>
+    </div>
+
+    <!-- Budget meter (shared across steps) -->
+    <div class="dbb-budget" id="dbb-budget" aria-live="polite">
+        <span class="text-muted text-sm">Budget:</span>
+        <span id="dbb-budget-text" class="text-sm">not started</span>
+    </div>
+
+    <!-- Step 1: Sources -->
+    <section class="dbb-step" id="dbb-step-1" aria-labelledby="dbb-step-1-title">
+        <div class="dbb-card">
+            <h2 id="dbb-step-1-title" class="dbb-card-title">Step 1 — Add sources</h2>
+            <p class="text-muted text-sm dbb-mb">
+                Give us a portfolio page and/or a few project URLs. We crawl two levels deep
+                (the portfolio plus its discovered project links, plus any explicit URLs below).
+            </p>
+
+            <div class="form-group">
+                <label for="dbb-portfolio-url">Portfolio URL (optional)</label>
+                <input type="url" id="dbb-portfolio-url"
+                       placeholder="https://your-portfolio.example.com"
+                       autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label>Project URLs (optional, add as many as you like)</label>
+                <div id="dbb-project-urls">
+                    <div class="dbb-url-row">
+                        <input type="url" class="dbb-project-url-input"
+                               placeholder="https://github.com/you/project"
+                               aria-label="Project URL">
+                        <button type="button" class="btn btn-secondary btn-sm dbb-remove-url"
+                                onclick="dbbRemoveProjectUrl(this)" aria-label="Remove this URL">Remove</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm dbb-mt"
+                        onclick="dbbAddProjectUrl()">+ Add another URL</button>
+            </div>
+
+            <div class="form-group">
+                <label for="dbb-github-pat">GitHub Personal Access Token (optional)</label>
+                <input type="password" id="dbb-github-pat"
+                       placeholder="ghp_..." autocomplete="off">
+                <p class="text-muted text-sm dbb-hint">
+                    Improves GitHub rate limits and lets us read your private repositories.
+                </p>
+            </div>
+
+            <div class="dbb-actions">
+                <button type="button" class="btn btn-primary" id="dbb-run-extract"
+                        onclick="dbbRunExtract()">
+                    <span id="dbb-extract-label">Run extraction</span>
+                    <span id="dbb-extract-spinner" class="dbb-spinner" hidden>&nbsp;</span>
+                </button>
+            </div>
+
+            <!-- Collapsible run log -->
+            <details class="dbb-log" id="dbb-log-wrap" hidden>
+                <summary>Run log</summary>
+                <pre id="dbb-log-content" class="dbb-log-content"></pre>
+            </details>
+        </div>
+    </section>
+
+    <!-- Step 2: Q&A -->
+    <section class="dbb-step" id="dbb-step-2" aria-labelledby="dbb-step-2-title" hidden>
+        <div class="dbb-card">
+            <h2 id="dbb-step-2-title" class="dbb-card-title">Step 2 — Answer a few questions</h2>
+            <p class="text-muted text-sm dbb-mb">
+                Each answer turns into resume items and/or cover-letter moments.
+                You can skip any question.
+                Accumulated so far:
+                <strong id="dbb-accum-count">0 items, 0 moments</strong>.
+            </p>
+            <div id="dbb-questions-list"></div>
+            <div class="dbb-actions dbb-between">
+                <button type="button" class="btn btn-secondary" onclick="dbbGoToStep(1)">&larr; Back</button>
+                <button type="button" class="btn btn-primary" onclick="dbbGoToStep(3)">Continue &rarr;</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Step 3: Review & Save -->
+    <section class="dbb-step" id="dbb-step-3" aria-labelledby="dbb-step-3-title" hidden>
+        <div class="dbb-card">
+            <h2 id="dbb-step-3-title" class="dbb-card-title">Step 3 — Review and save</h2>
+            <p class="text-muted text-sm dbb-mb">
+                Review what was extracted. Remove anything that doesn't belong, then generate a markdown preview before saving.
+            </p>
+
+            <div class="dbb-review-split">
+                <div class="dbb-review-col">
+                    <h3 class="dbb-col-title">Resume items</h3>
+                    <div class="dbb-list-header">
+                        <div class="dbb-list-counts" id="dbb-items-count" aria-live="polite">0 items</div>
+                        <div class="dbb-list-bulk">
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                    onclick="dbbSelectAll('item')">Select all</button>
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                    onclick="dbbClearFlagged('item')">Clear flagged</button>
+                        </div>
+                    </div>
+                    <div id="dbb-items-list" class="dbb-list"></div>
+                </div>
+                <div class="dbb-review-col">
+                    <h3 class="dbb-col-title">Cover-letter moments</h3>
+                    <div class="dbb-list-header">
+                        <div class="dbb-list-counts" id="dbb-moments-count" aria-live="polite">0 moments</div>
+                        <div class="dbb-list-bulk">
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                    onclick="dbbSelectAll('moment')">Select all</button>
+                            <button type="button" class="btn btn-secondary btn-sm"
+                                    onclick="dbbClearFlagged('moment')">Clear flagged</button>
+                        </div>
+                    </div>
+                    <div id="dbb-moments-list" class="dbb-list"></div>
+                </div>
+            </div>
+
+            <div class="dbb-actions dbb-mt">
+                <button type="button" class="btn btn-primary" onclick="dbbGeneratePreview()">
+                    Generate preview
+                </button>
+            </div>
+
+            <div id="dbb-preview-wrap" hidden>
+                <h3 class="dbb-col-title dbb-mt">Markdown preview</h3>
+                <div class="dbb-preview-split">
+                    <div class="dbb-preview-col">
+                        <label for="dbb-preview-candidate" class="dbb-preview-label">Candidate database</label>
+                        <pre id="dbb-preview-candidate" class="dbb-preview-pane" aria-readonly="true"></pre>
+                    </div>
+                    <div class="dbb-preview-col">
+                        <label for="dbb-preview-cl" class="dbb-preview-label">Cover-letter database</label>
+                        <pre id="dbb-preview-cl" class="dbb-preview-pane" aria-readonly="true"></pre>
+                    </div>
+                </div>
+
+                <div class="dbb-save-row">
+                    <fieldset class="dbb-mode">
+                        <legend class="text-sm">Save mode</legend>
+                        <label class="dbb-radio">
+                            <input type="radio" name="dbb-save-mode" value="replace" checked>
+                            Replace existing
+                        </label>
+                        <label class="dbb-radio">
+                            <input type="radio" name="dbb-save-mode" value="append">
+                            Append to existing
+                        </label>
+                    </fieldset>
+                    <button type="button" class="btn btn-primary" onclick="dbbSave()">
+                        Save to my databases
+                    </button>
+                </div>
+            </div>
+
+            <div class="dbb-actions dbb-mt">
+                <button type="button" class="btn btn-secondary" onclick="dbbGoToStep(2)">&larr; Back</button>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/database_builder.js') }}"></script>
+<script>dbbInit();</script>
+{% endblock %}

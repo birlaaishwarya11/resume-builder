@@ -7,6 +7,11 @@ Supported providers: anthropic, openai, gemini
 import json
 import re
 
+# Per-call output cap. Bounds cost on every provider so a hostile rules file
+# or a runaway agent loop cannot drain the user's key. Anthropic requires
+# max_tokens; OpenAI and Gemini accept it but did not enforce one previously.
+MAX_OUTPUT_TOKENS = 4000
+
 
 def call_llm(provider: str, api_key: str, system_prompt: str,
              user_message: str, model: str | None = None) -> str:
@@ -44,7 +49,7 @@ def call_llm(provider: str, api_key: str, system_prompt: str,
         model_name = model or 'claude-3-haiku-20240307'
         message = client.messages.create(
             model=model_name,
-            max_tokens=4000,
+            max_tokens=MAX_OUTPUT_TOKENS,
             temperature=0,
             system=system_prompt,
             messages=[{'role': 'user', 'content': user_message}],
@@ -62,6 +67,7 @@ def call_llm(provider: str, api_key: str, system_prompt: str,
                 {'role': 'user', 'content': user_message},
             ],
             temperature=0,
+            max_tokens=MAX_OUTPUT_TOKENS,
         )
         return completion.choices[0].message.content
 
@@ -77,7 +83,10 @@ def call_llm(provider: str, api_key: str, system_prompt: str,
         response = client.models.generate_content(
             model=model_name,
             contents=content,
-            config=types.GenerateContentConfig(temperature=0),
+            config=types.GenerateContentConfig(
+                temperature=0,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+            ),
         )
         result = response.text
         if result is None:

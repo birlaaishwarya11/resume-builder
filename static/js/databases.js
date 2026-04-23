@@ -181,8 +181,20 @@ function inlineMarkdown(text) {
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(_m, label, url) {
+        return '<a href="' + safeUrl(url) + '" rel="noopener noreferrer">' + label + '</a>';
+    });
     return text;
+}
+
+function safeUrl(url) {
+    // Block javascript:, data:, vbscript:, file: schemes that escapeHtml does
+    // NOT neutralise. Allow only http(s)/mailto/relative URLs in the preview.
+    var trimmed = String(url || '').trim();
+    if (/^\s*(javascript|data|vbscript|file):/i.test(trimmed)) {
+        return '#';
+    }
+    return trimmed;
 }
 
 function escapeHtml(text) {

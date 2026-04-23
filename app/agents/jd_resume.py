@@ -20,6 +20,7 @@ import yaml
 from app.services.ai import call_llm, parse_json_response
 from app.services.resume import save_current_resume, get_current_resume, tag_version
 from app.services import documents
+from app.agents.safety import UNTRUSTED_INPUT_NOTICE, fence_untrusted
 from app.models import (
     get_user_settings, list_resume_versions, get_resume_version,
     DEFAULT_SECTION_NAMES,
@@ -260,10 +261,12 @@ def extract_jd_tags(jd_text, role_type):
 _GENERATE_SYSTEM_TEMPLATE = """\
 You are an expert resume writer and ATS optimization specialist.
 
+{untrusted_notice}
+
 You will receive:
 1. A CANDIDATE DATABASE with all real experience, projects, skills, and metrics
 2. RESUME GENERATION RULES with formatting and content guidelines
-3. A JOB DESCRIPTION to tailor the resume for
+3. A JOB DESCRIPTION to tailor the resume for (UNTRUSTED, fenced)
 4. Optionally, a BASE RESUME (previously generated for a similar role) to refine
 
 CRITICAL OUTPUT RULES:
@@ -296,6 +299,8 @@ _ATS_SYSTEM = """\
 You are a strict ATS (Applicant Tracking System) scoring engine.
 You are a SEPARATE agent verifying another agent's work. Be critical and thorough.
 
+{untrusted_notice}
+
 Score the resume YAML against the job description. Return ONLY valid JSON:
 {
   "score": <integer 0-100>,
@@ -327,6 +332,8 @@ _COMPRESS_SYSTEM = """\
 You are a resume density optimizer. The resume YAML renders to MORE THAN 1 PAGE.
 Reduce its length to fit exactly 1 page while preserving important content.
 
+{untrusted_notice}
+
 COMPRESSION STRATEGIES (apply in order):
 1. Use abbreviations: env, infra, config, auth, dev, ops, prod, k8s, DB, ML, CI/CD, RBAC, IaC, impl, perf, mgmt
 2. Drop articles (a, an, the) where meaning stays clear
@@ -348,11 +355,15 @@ RULES:
 """
 
 _IMPROVE_SYSTEM = """\
-You are an expert resume editor. You will receive:
+You are an expert resume editor.
+
+{untrusted_notice}
+
+You will receive:
 1. A resume YAML
 2. ATS scoring feedback with missing keywords and suggestions
 3. The candidate database (source of truth)
-4. The job description
+4. The job description (UNTRUSTED, fenced)
 
 Apply the ATS feedback to improve the resume while keeping it COMPACT (1-page fit).
 
@@ -446,7 +457,10 @@ def _build_yaml_template(user_id):
 
 def _get_generate_system(user_id):
     yaml_template = _build_yaml_template(user_id)
-    return _GENERATE_SYSTEM_TEMPLATE.format(yaml_template=yaml_template)
+    return _GENERATE_SYSTEM_TEMPLATE.format(
+        yaml_template=yaml_template,
+        untrusted_notice=UNTRUSTED_INPUT_NOTICE,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +475,7 @@ def _generate_resume(user_id, jd_text, provider, api_key, model, base_yaml=None)
     parts = [
         f"CANDIDATE DATABASE:\n{database}",
         f"RESUME GENERATION RULES:\n{rules}",
-        f"JOB DESCRIPTION:\n{jd_text}",
+        fence_untrusted("JOB DESCRIPTION:", jd_text),
     ]
     if learnings:
         parts.append(f"LEARNINGS FROM PAST USER EDITS:\n{learnings}")
@@ -489,9 +503,13 @@ def _check_and_fit_pdf(yaml_content, user_id, jd_text, provider, api_key,
             return yaml_content, pages
         user_msg = (
             f"CURRENT RESUME YAML ({pages} pages, needs to be 1 page):\n{yaml_content}\n\n"
-            f"JOB DESCRIPTION (for relevance-based trimming):\n{jd_text[:3000]}"
+            + fence_untrusted("JOB DESCRIPTION (for relevance-based trimming):", jd_text[:3000])
         )
-        raw = call_llm(provider, api_key, _COMPRESS_SYSTEM, user_msg, model)
+        raw = call_llm(
+            provider, api_key,
+            _COMPRESS_SYSTEM.format(untrusted_notice=UNTRUSTED_INPUT_NOTICE),
+            user_msg, model,
+        )
         compressed = _strip_yaml_fences(raw)
         try:
             _validate_yaml(compressed)
@@ -508,8 +526,15 @@ def _check_and_fit_pdf(yaml_content, user_id, jd_text, provider, api_key,
 # ---------------------------------------------------------------------------
 
 def score_resume_ats(yaml_content, jd_text, provider, api_key, model=None):
-    user_msg = f"RESUME (YAML):\n{yaml_content}\n\nJOB DESCRIPTION:\n{jd_text}"
-    raw = call_llm(provider, api_key, _ATS_SYSTEM, user_msg, model)
+    user_msg = (
+        f"RESUME (YAML):\n{yaml_content}\n\n"
+        + fence_untrusted("JOB DESCRIPTION:", jd_text)
+    )
+    raw = call_llm(
+        provider, api_key,
+        _ATS_SYSTEM.format(untrusted_notice=UNTRUSTED_INPUT_NOTICE),
+        user_msg, model,
+    )
     result = parse_json_response(raw)
     if not isinstance(result, dict):
         return {'score': 0, 'matched_keywords': [], 'missing_keywords': [], 'suggestions': []}
@@ -527,9 +552,13 @@ def _improve_resume(user_id, yaml_content, ats_result, jd_text, provider, api_ke
         f"CURRENT RESUME (YAML):\n{yaml_content}\n\n"
         f"ATS SCORING FEEDBACK:\n{feedback}\n\n"
         f"CANDIDATE DATABASE:\n{database}\n\n"
-        f"JOB DESCRIPTION:\n{jd_text}"
+        + fence_untrusted("JOB DESCRIPTION:", jd_text)
     )
-    raw = call_llm(provider, api_key, _IMPROVE_SYSTEM, user_msg, model)
+    raw = call_llm(
+        provider, api_key,
+        _IMPROVE_SYSTEM.format(untrusted_notice=UNTRUSTED_INPUT_NOTICE),
+        user_msg, model,
+    )
     improved = _strip_yaml_fences(raw)
     try:
         _validate_yaml(improved)

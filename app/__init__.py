@@ -73,6 +73,7 @@ def create_app(config_class=Config):
     from app.blueprints.onboarding import bp as onboarding_bp
     from app.blueprints.parsers import bp as parsers_bp
     from app.blueprints.docs import bp as docs_bp
+    from app.blueprints.database_builder import bp as database_builder_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(editor_bp)
@@ -84,5 +85,6 @@ def create_app(config_class=Config):
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(parsers_bp)
     app.register_blueprint(docs_bp)
+    app.register_blueprint(database_builder_bp)
 
     return app

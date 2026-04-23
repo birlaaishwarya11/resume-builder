@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Knowledge - Resume Builder{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/knowledge.css') }}">
+{% endblock %}
+{% block content %}
+<div class="settings-container knowledge-container">
+    <h1>Knowledge</h1>
+    <p class="text-muted text-sm mb-2">Your databases and rules are the raw material your resume and cover-letter agents draw from. Keep them tidy and accurate.</p>
+
+    <!-- Build from links CTA -->
+    <div class="card kb-cta">
+        <div class="kb-cta-inner">
+            <div class="kb-cta-text">
+                <div class="card-title">Build from links</div>
+                <p class="text-muted text-sm">Bootstrap your databases from your portfolio, GitHub, and a few questions.</p>
+            </div>
+            <a href="{{ url_for('database_builder.database_builder_page') }}" class="btn btn-primary">Start builder</a>
+        </div>
+    </div>
+
+    <!-- 2x2 grid of knowledge cards -->
+    <div class="kb-grid">
+        <div class="card kb-card">
+            <div class="kb-card-head">
+                <div class="card-title">Candidate Database</div>
+                <span class="kb-size text-muted text-sm">{{ '%.1f'|format(sizes.candidate / 1024) }} KB</span>
+            </div>
+            <p class="text-muted text-sm kb-card-desc">Your experience, projects, skills, and accomplishments in free-form markdown -- the source of truth agents pull from.</p>
+            <div class="kb-card-actions">
+                <a href="{{ url_for('databases.candidate_page') }}" class="btn btn-primary btn-sm">Edit</a>
+            </div>
+        </div>
+
+        <div class="card kb-card">
+            <div class="kb-card-head">
+                <div class="card-title">Cover Letter Database</div>
+                <span class="kb-size text-muted text-sm">{{ '%.1f'|format(sizes.cover_letter / 1024) }} KB</span>
+            </div>
+            <p class="text-muted text-sm kb-card-desc">Reusable stories, hooks, and closers your cover-letter agent mines when drafting.</p>
+            <div class="kb-card-actions">
+                <a href="{{ url_for('databases.cover_letter_db_page') }}" class="btn btn-primary btn-sm">Edit</a>
+            </div>
+        </div>
+
+        <div class="card kb-card">
+            <div class="kb-card-head">
+                <div class="card-title">Resume Rules</div>
+                <span class="kb-size text-muted text-sm">{{ '%.1f'|format(sizes.resume_rules / 1024) }} KB</span>
+            </div>
+            <p class="text-muted text-sm kb-card-desc">Style, tone, and formatting rules the resume pipeline must follow for every generated PDF.</p>
+            <div class="kb-card-actions">
+                <a href="{{ url_for('databases.resume_rules_page') }}" class="btn btn-primary btn-sm">Edit</a>
+            </div>
+        </div>
+
+        <div class="card kb-card">
+            <div class="kb-card-head">
+                <div class="card-title">Cover Letter Rules</div>
+                <span class="kb-size text-muted text-sm">{{ '%.1f'|format(sizes.cover_letter_rules / 1024) }} KB</span>
+            </div>
+            <p class="text-muted text-sm kb-card-desc">Voice, length, and structural rules the cover-letter agent applies on every draft.</p>
+            <div class="kb-card-actions">
+                <a href="{{ url_for('databases.cover_letter_rules_page') }}" class="btn btn-primary btn-sm">Edit</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -9,6 +9,7 @@ Architecture:
 """
 
 from app.services import documents
+from app.agents.safety import UNTRUSTED_INPUT_NOTICE, fence_untrusted
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +82,7 @@ def build_cover_letter_prompt(user_id, jd_text, company_name,
         for s in stories
     )
 
-    system = COVER_LETTER_SYSTEM
+    system = COVER_LETTER_SYSTEM + "\n\n" + UNTRUSTED_INPUT_NOTICE
 
     user_rules = documents.get_cover_letter_rules(user_id).strip()
     if user_rules:
@@ -94,7 +95,7 @@ def build_cover_letter_prompt(user_id, jd_text, company_name,
         f"CANDIDATE DATABASE:\n{database}",
         f"COVER LETTER DATABASE:\n{cl_database}",
         f"CURRENT RESUME (do NOT repeat these bullets):\n{resume_yaml}",
-        f"JOB DESCRIPTION:\n{jd_text}",
+        fence_untrusted("JOB DESCRIPTION:", jd_text),
         f"COMPANY: {company_name}",
     ]
     if role_title:

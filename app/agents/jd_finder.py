@@ -7,6 +7,7 @@ import json
 
 from app.services.ai import call_llm, parse_json_response
 from app.agents.jd_resume import generate_resume_for_jd, analyze_jd
+from app.agents.safety import UNTRUSTED_INPUT_NOTICE, fence_untrusted
 
 
 _JOB_BOARDS = [
@@ -35,13 +36,19 @@ extract ONLY the job description text. Include:
 
 Do NOT include navigation menus, footers, cookie notices, or other job listings.
 Return the extracted JD as clean text. If no JD found, respond: NO_JD_FOUND
+
+{untrusted_notice}
 """
 
 
 def extract_jd_from_html(page_content, provider, api_key, model=None):
     """Extract structured JD text from raw page content using an LLM."""
-    content = page_content[:15000]
-    raw = call_llm(provider, api_key, _EXTRACT_SYSTEM, content, model)
+    fenced = fence_untrusted("PAGE CONTENT:", page_content or '')
+    raw = call_llm(
+        provider, api_key,
+        _EXTRACT_SYSTEM.format(untrusted_notice=UNTRUSTED_INPUT_NOTICE),
+        fenced, model,
+    )
     if 'NO_JD_FOUND' in raw:
         return None
     return raw.strip()
@@ -63,8 +70,15 @@ If none found: {"best_url": null, "confidence": "none", "reason": "no job postin
 
 def select_best_url(search_results, company, role, provider, api_key, model=None):
     """Given search result text, pick the best URL for the actual job posting."""
-    user_msg = f"Company: {company}\nRole: {role}\n\nSearch Results:\n{search_results}"
-    raw = call_llm(provider, api_key, _SELECT_SYSTEM, user_msg, model)
+    user_msg = (
+        f"Company: {company}\nRole: {role}\n\n"
+        + fence_untrusted("SEARCH RESULTS:", search_results or '')
+    )
+    raw = call_llm(
+        provider, api_key,
+        _SELECT_SYSTEM + "\n\n" + UNTRUSTED_INPUT_NOTICE,
+        user_msg, model,
+    )
     result = parse_json_response(raw)
     if not isinstance(result, dict):
         return {'best_url': None, 'confidence': 'none', 'reason': 'Failed to parse response'}

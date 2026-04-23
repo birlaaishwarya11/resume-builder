@@ -12,6 +12,7 @@ from app.models import (
     generate_mcp_api_key, get_mcp_api_key,
 )
 from app.services.crypto import encrypt_api_key, decrypt_api_key
+from app.services import documents
 
 bp = Blueprint('settings', __name__)
 
@@ -23,6 +24,26 @@ def settings_page():
     user = get_user_by_id(user_id)
     settings = get_user_settings(user_id)
     return render_template('settings.html', user=user, settings=settings)
+
+
+@bp.route('/knowledge')
+@login_required
+def knowledge_page():
+    user_id = get_current_user_id()
+    user = get_user_by_id(user_id)
+
+    def _kb(text: str) -> int:
+        if not text:
+            return 0
+        return len(text.encode('utf-8'))
+
+    sizes = {
+        'candidate': _kb(documents.get_candidate_database(user_id)),
+        'cover_letter': _kb(documents.get_cover_letter_database(user_id)),
+        'resume_rules': _kb(documents.get_resume_rules(user_id)),
+        'cover_letter_rules': _kb(documents.get_cover_letter_rules(user_id)),
+    }
+    return render_template('knowledge.html', user=user, sizes=sizes)
 
 
 @bp.route('/api/settings', methods=['GET', 'POST'])
